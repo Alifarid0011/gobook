@@ -13,11 +13,11 @@ Built by [Ali Farid](https://github.com/Alifarid0011).
 Install Go 1.25 or newer:
 
 ```sh
-go install github.com/Alifarid0011/gobook@v0.5.0
+go install github.com/Alifarid0011/gobook@v0.5.1
 gobook
 ```
 
-If your Go binary directory is not on PATH, use `go run github.com/Alifarid0011/gobook@v0.5.0` instead.
+If your Go binary directory is not on PATH, use `go run github.com/Alifarid0011/gobook@v0.5.1` instead.
 
 Or run from a source checkout:
 

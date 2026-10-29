@@ -22,7 +22,7 @@ func main() { b, _ := json.Marshal(os.Args[1:]); if err := os.WriteFile(os.Geten
     if (($actual | ConvertTo-Json -Compress) -cne ($expected | ConvertTo-Json -Compress)) { throw 'Launcher did not preserve arguments' }
     $env:PATH = $temp
     $message = & $shell -NoProfile -ExecutionPolicy Bypass -File "$temp/gobook.ps1" 2>&1 | Out-String
-    if ($LASTEXITCODE -eq 0 -or $message -notmatch 'Go compiler.*https://go.dev/dl/') { throw 'Missing Go compiler did not produce a useful failure' }
+    if ($LASTEXITCODE -eq 0 -or $message -notmatch 'Go compiler' -or $message -notmatch 'https://go\.dev/dl/') { throw "Missing Go compiler did not produce a useful failure (exit $LASTEXITCODE): $message" }
     Write-Host 'Windows launcher checks passed'
 } finally {
     $env:PATH = $oldPath

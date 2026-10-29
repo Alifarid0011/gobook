@@ -435,3 +435,48 @@ func TestNativeIntegrationCanonicalFilesAndCommandRevision(t *testing.T) {
 		t.Fatal("old kernel command accepted")
 	}
 }
+
+func TestNativeStopWaitsForPreparation(t *testing.T) {
+	dir := t.TempDir()
+	s := newNativeSession(dir, "test")
+	s.prepared = make(chan struct{})
+	s.cancel = func() {}
+	stopped := make(chan error, 1)
+	go func() { stopped <- s.stop() }()
+	// Wait until Stop has taken ownership, then finish the simulated build write.
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		s.mu.Lock()
+		closed := s.closed
+		s.mu.Unlock()
+		if closed {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("stop did not begin")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	select {
+	case err := <-stopped:
+		close(s.prepared)
+		t.Fatalf("cleanup returned before preparation completed: %v", err)
+	default:
+	}
+	if err := os.WriteFile(filepath.Join(dir, "notebook.exe"), []byte("build completed"), 0600); err != nil {
+		close(s.prepared)
+		t.Fatal(err)
+	}
+	close(s.prepared)
+	select {
+	case err := <-stopped:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("stop did not finish")
+	}
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatal("preparation directory retained")
+	}
+}

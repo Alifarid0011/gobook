@@ -60,6 +60,7 @@ type nativeSession struct {
 	conn           net.Conn
 	reader         *bufio.Reader
 	done           chan struct{}
+	prepared       chan struct{}
 	closed         bool
 	stopOnce       sync.Once
 	stopErr        error
@@ -278,6 +279,9 @@ func (m *NativeManager) Start(ctx context.Context, n Notebook) (snap NativeSnaps
 		return snap, err
 	}
 	s := newNativeSession(dir, marker)
+	s.prepared = make(chan struct{})
+	var preparedOnce sync.Once
+	preparationDone := func() { preparedOnce.Do(func() { close(s.prepared) }) }
 	s.inputs = inputs
 	life, cancel := context.WithCancel(context.Background())
 	s.cancel = cancel
@@ -295,6 +299,7 @@ func (m *NativeManager) Start(ctx context.Context, n Notebook) (snap NativeSnaps
 	m.session = s
 	m.mu.Unlock()
 	defer func() {
+		preparationDone()
 		if err != nil {
 			s.fail(err)
 			snap = s.view()
@@ -348,6 +353,8 @@ func (m *NativeManager) Start(ctx context.Context, n Notebook) (snap NativeSnaps
 			}
 		}
 	}
+	// Windows cannot remove files while startup reads or writes still hold them.
+	preparationDone()
 	listener, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
 		return snap, err
@@ -660,7 +667,7 @@ func (s *nativeSession) stop() error {
 		s.closed = true
 		s.snapshot.Active = false
 		s.snapshot.Ready = false
-		conn, cmd, done, cancel := s.conn, s.cmd, s.done, s.cancel
+		conn, cmd, done, cancel, prepared := s.conn, s.cmd, s.done, s.cancel, s.prepared
 		s.mu.Unlock()
 		if conn != nil {
 			_ = conn.Close()
@@ -674,6 +681,9 @@ func (s *nativeSession) stop() error {
 			}
 			cleanupProcess(cmd)
 			<-done
+		}
+		if prepared != nil {
+			<-prepared
 		}
 		s.stopErr = os.RemoveAll(s.dir)
 	})
