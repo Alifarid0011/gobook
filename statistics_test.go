@@ -60,6 +60,7 @@ func TestNotebookAssets(t *testing.T) {
 		{"/desktop_ui.js", "text/javascript", 200},
 		{"/examples/penguins.gobook.json", "application/json", 200},
 		{"/examples/memory.gobook.json", "application/json", 200},
+		{"/examples/functions.gobook.json", "application/json", 200},
 		{"/examples/summary.gobook.json", "application/json", 200},
 		{"/examples/regression.gobook.json", "application/json", 200},
 		{"/examples/distribution.gobook.json", "application/json", 200},

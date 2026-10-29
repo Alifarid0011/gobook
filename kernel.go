@@ -231,10 +231,10 @@ func validatePartialCells(cells []Cell) error {
 		wrapped := "package main\nfunc main(){\n//line " + name + ":1\n" + cell.Code + "\n}\n"
 		parsed, err := parser.ParseFile(token.NewFileSet(), name, wrapped, 0)
 		if err != nil {
-			return fmt.Errorf("Run to here requires complete statements in each cell: %w; use Run all for cross-cell statements", err)
+			return fmt.Errorf("Run to here requires complete statements in each cell: %w; use a fresh full run for cross-cell statements", err)
 		}
 		if len(parsed.Decls) != 1 {
-			return fmt.Errorf("Run to here requires complete statements in each cell (%s); use Run all for cross-cell statements", name)
+			return fmt.Errorf("Run to here requires complete statements in each cell (%s); use a fresh full run for cross-cell statements", name)
 		}
 		hasGoto := false
 		ast.Inspect(parsed, func(node ast.Node) bool {
@@ -244,7 +244,7 @@ func validatePartialCells(cells []Cell) error {
 			return true
 		})
 		if hasGoto {
-			return fmt.Errorf("Run to here does not support goto; use Run all (%s)", name)
+			return fmt.Errorf("Run to here does not support goto; use a fresh full run (%s)", name)
 		}
 	}
 	return nil

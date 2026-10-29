@@ -52,3 +52,16 @@ test('rejected command with one remote history entry never mixes remote and cach
 test('stopped local app keeps debugger disabled without a capability',()=>{
  const h=controller();h.context.token='';h.check.controls();assert.equal(h.$('debug-start').disabled,true);assert.equal(h.$('run').disabled,true);
 });
+
+test('selected cell never replays a missing prefix',async()=>{
+ const h=controller(),n={...h.notebook(),cells:[{code:'x:=1'},{code:'x++'},{code:'fmt.Println(x)'}]};
+ h.current(n);h.check.set(n,{...snapshot(),nextCell:1});const sent=[];
+ h.context.fetch=async(path,options)=>{sent.push(JSON.parse(options.body));return {ok:true,text:async()=>JSON.stringify({...snapshot(),nextCell:1,error:'cell 3 unavailable'})}};
+ await h.check.run(3);assert.deepEqual(sent.map(r=>r.cell),[3]);
+});
+
+test('selected cell starts memory kernel automatically without executing other cells',async()=>{
+ const h=controller(),sent=[];
+ h.context.fetch=async(path,options)=>{sent.push({path,body:JSON.parse(options.body)});return {ok:true,text:async()=>JSON.stringify(path.endsWith('/start')?{...snapshot(),nextCell:1}:{...snapshot([1]),nextCell:1,commandAccepted:true,result:result(1)})}};
+ assert.equal(await h.check.run(1),true);assert.deepEqual(sent.map(r=>r.path),['/api/native/start','/api/native/execute']);assert.equal(sent[1].body.cell,1);
+});

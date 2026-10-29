@@ -3,7 +3,7 @@
 GoBook compiles the whole notebook into one Go main function and pauses a
 resident worker between complete-statement cells. This keeps ordinary slices,
 maps, pointers, handles and goroutines alive without interpreting Go or replaying
-previous cells. Use the **Kernel** panel to start, stop, restart or inspect it.
+previous cells. A cell Run or Run all automatically starts it. Use the **Kernel** panel to stop, restart or inspect it.
 
 1. Load **Memory & goroutines** and start the memory kernel.
 2. Run cells 1 and 2. Repeat cell 2: its counter increases and the slice address
@@ -14,8 +14,8 @@ previous cells. Use the **Kernel** panel to start, stop, restart or inspect it.
 
 ## Order and scope
 
-Only previously reached cells or the next cell can execute. Requesting a later
-cell runs the missing prefix in order. Repeating an earlier cell invalidates later
+Only previously reached cells or the next cell can execute. Requesting an unavailable later
+cell is rejected without running its prerequisites. Run those cells explicitly first. Repeating an earlier cell invalidates later
 outputs and the execution frontier; it does not roll back mutations, files,
 external side effects or background goroutines. **Run all** explicitly repeats
 every cell in the same worker. It does not implicitly reset memory.
@@ -61,3 +61,19 @@ not a proof that cells can execute in parallel.
 
 Code executes with the host user's permissions. The private loopback control
 channel coordinates execution; it is not an isolation boundary for notebook code.
+
+## Single-cell defaults and functions
+
+Run cell and Shift+Enter execute exactly one command in the resident worker.
+Run all explicitly executes every cell in order. The older fresh-process path
+is available as **Kernel → Run all in a fresh process** after stopping a kernel.
+The legacy `/api/run` endpoint remains a fresh-process API for existing clients.
+
+Function values and closures share native scope with earlier values. Load
+**Shared functions & data** for a tested allocation, function-call counter,
+return value and later mutation. Define a closure with `name := func(...) ...`;
+package-level named function declarations are outside the current cell syntax.
+
+The initial build still compiles the whole notebook once. Source edits and added
+cells require a restart. This is a native compiled kernel with an execution
+frontier, not arbitrary out-of-order Jupyter evaluation or live code redefinition.

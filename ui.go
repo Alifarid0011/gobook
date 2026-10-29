@@ -131,7 +131,7 @@ function addCell(code = '', focus = false) {
  const label = document.createElement('span'); label.className = 'cell-label';
  const actions = document.createElement('div'); actions.className = 'cell-actions';
  const up = document.createElement('button'), down = document.createElement('button'), remove = document.createElement('button');
- const runCell = document.createElement('button'); runCell.type = 'button'; runCell.className = 'run-cell'; runCell.textContent = '▶ Run to here'; runCell.title = 'Start fresh and run all cells up to this one';
+ const runCell = document.createElement('button'); runCell.type = 'button'; runCell.className = 'run-cell'; runCell.textContent = '▶ Run cell'; runCell.title = 'Run only this cell and retain earlier values in native memory';
  runCell.onclick = () => runNotebook([...$('cells').children].indexOf(section) + 1);
  up.textContent = '↑'; up.title = 'Move cell up'; up.setAttribute('aria-label', 'Move cell up');
  down.textContent = '↓'; down.title = 'Move cell down'; down.setAttribute('aria-label', 'Move cell down');
@@ -156,7 +156,7 @@ function addCell(code = '', focus = false) {
   if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); editor.setRangeText(' '.repeat(preferences.indent), editor.selectionStart, editor.selectionEnd, 'end'); updateLines(); editorViews.get(editor)?.refresh(); markChanged(); }
  });
  const output = document.createElement('section'); output.className = 'cell-output'; output.hidden = true; output.setAttribute('aria-label','Cell output');
- const foot = document.createElement('div'); foot.className = 'cell-foot'; foot.textContent = 'Shift Enter · Run to here repeats earlier cells in a fresh process';
+ const foot = document.createElement('div'); foot.className = 'cell-foot'; foot.textContent = 'Shift Enter · run only this cell; native values stay in RAM';
  wrap.append(lines, editor); section.append(head, wrap, foot, output); $('cells').append(section); updateLines(); renumber();
  editor.style.tabSize = preferences.indent; editor.wrap = preferences.wrap ? 'soft' : 'off';
  editorViews.set(editor, GoBookEditor.attach(wrap, editor));
@@ -238,7 +238,7 @@ $('file').onchange = async () => {
   if (value.format === 'gobook-experiment') {
    if (value.version !== 1) throw Error('Unsupported experiment version');
    validateResult(value.result); load(value.notebook); renderResult(value.result); setExperiment(value); globalThis.GoBookMemory?.importedSession(value.session);
-   setStatus('Imported results' + (value.notebook.runThrough ? ' · through cell ' + value.notebook.runThrough : '') + ' · not rerun'); $('execution-note').textContent = 'Historical results supplied by this file; not verified by this host. ' + (value.notebook.runThrough ? 'Use Run to here on cell ' + value.notebook.runThrough + ' to replay the saved prefix.' : 'Use Run all to replay the notebook.'); if (value.session?.kind === 'native') $('execution-note').textContent += ' Native session: the file contains results and command history, not live RAM. Replay is available in Kernel controls.'; setView('results');
+   setStatus('Imported results' + (value.notebook.runThrough ? ' · through cell ' + value.notebook.runThrough : '') + ' · not rerun'); $('execution-note').textContent = 'Historical results supplied by this file; not verified by this host. ' + (value.notebook.runThrough ? 'Run cells 1 through ' + value.notebook.runThrough + ' explicitly in order to replay the saved prefix.' : 'Use Run all to replay the notebook.'); if (value.session?.kind === 'native') $('execution-note').textContent += ' Native session: the file contains results and command history, not live RAM. Replay is available in Kernel controls.'; setView('results');
   } else { if (file.size > 262144) throw Error('Notebook exceeds 256 KiB'); load(value); }
   notify('Opened. Code has not been run.');
  }
@@ -297,12 +297,24 @@ function renderArtifacts(artifacts, parent) {
    parent.append(figure);
   }
 }
+const displayedCellOutputs = new WeakMap();
+function sameCellOutput(previous, cell, error) {
+ if (!previous || previous.stdout !== cell.stdout || previous.stderr !== cell.stderr || previous.error !== Boolean(error)) return false;
+ const before=previous.artifacts || [], after=cell.artifacts || [];
+ return before.length===after.length && before.every((a,i)=>a.name===after[i].name && a.mime===after[i].mime && a.data===after[i].data);
+}
 function clearCellOutputs() {
- document.querySelectorAll('.cell-output').forEach(el => { el.replaceChildren(); el.hidden = true; });
+ document.querySelectorAll('.cell-output').forEach(el => { el.replaceChildren(); el.hidden = true; displayedCellOutputs.delete(el); });
  document.body.classList.remove('has-cell-outputs'); document.querySelector('.unassigned-output')?.remove();
 }
-function renderResult(result, inline = true) {
- validateResult(result); $('output').replaceChildren(); clearCellOutputs();
+function renderResult(result, inline = true, preserveCells = false, executedCell = null) {
+ validateResult(result); $('output').replaceChildren();
+ if (!preserveCells || !inline) clearCellOutputs();
+ else {
+  const present=new Set((result.cells || []).map(c=>c.cell));
+  document.querySelectorAll('.cell-output').forEach((el,i)=>{if(!present.has(i+1)){el.replaceChildren();el.hidden=true;displayedCellOutputs.delete(el)}});
+  document.body.classList.remove('has-cell-outputs'); document.querySelector('.unassigned-output')?.remove();
+ }
  textOutput('STANDARD OUTPUT', result.stdout); textOutput('BUILD & RUN DIAGNOSTICS', result.stderr); textOutput('EXECUTION ERROR', result.error, true);
  if (result.truncated) textOutput('OUTPUT LIMIT', 'Output was truncated at 1 MiB.');
  exportText([result.stdout,result.stderr,result.error,result.truncated ? 'Output was truncated at 1 MiB.' : ''].filter(Boolean).join('\n'));
@@ -324,11 +336,16 @@ function renderResult(result, inline = true) {
   }
   for (const cell of result.cells) {
    const target = $('cells').children[cell.cell-1]?.querySelector('.cell-output'); if (!target) continue;
+   const ownError=Boolean(result.error) && cell.cell===(executedCell ?? result.cells.at(-1)?.cell);
+   if (preserveCells && !target.hidden && sameCellOutput(displayedCellOutputs.get(target),cell,ownError)) {
+    const heading=target.querySelector('.cell-output-heading');if(heading)heading.textContent='OUT ['+cell.cell+']';continue;
+   }
+   target.replaceChildren(); displayedCellOutputs.set(target,{...cell,error:ownError});
    target.hidden = false;
    const heading = document.createElement('div'); heading.className = 'cell-output-heading'; heading.textContent = 'OUT ['+cell.cell+']'; target.append(heading);
    textOutput('OUTPUT',cell.stdout,false,target); textOutput('STDERR',cell.stderr,true,target);
    renderArtifacts(cell.artifacts,target);
-   if (!cell.stdout && !cell.stderr && !cell.artifacts?.length) { const quiet = document.createElement('p'); quiet.textContent = result.error ? 'No captured output. See run diagnostics.' : 'Completed without output.'; quiet.className = 'cell-quiet'; target.append(quiet); }
+   if (!cell.stdout && !cell.stderr && !cell.artifacts?.length) { const quiet = document.createElement('p'); quiet.textContent = ownError ? 'No captured output. See run diagnostics.' : 'Completed without output.'; quiet.className = 'cell-quiet'; target.append(quiet); }
   }
  }
  if (!$('output').childNodes.length) emptyOutput('Quietly complete.', 'Your code finished successfully without producing output.');
@@ -344,7 +361,10 @@ function setBusy(value) {
  if (!value && !loadingExample && !debugging) renumber(); updateConnection(); showFiles(); $('output').setAttribute('aria-busy', String(value));
 }
 async function runNotebook(through = null) {
- if (globalThis.GoBookMemory?.active) { await globalThis.GoBookMemory.run(through); return; }
+ if (globalThis.GoBookMemory) return globalThis.GoBookMemory.run(through);
+ notify('The memory controller is not ready. Reload the workspace.');
+}
+async function runFreshNotebook(through = null) {
  if (busy || debugging || loadingExample || !token) return;
  let snapshot, sourceSnapshot; try { const n = notebook(); sourceSnapshot = JSON.stringify(n); if (through !== null) n.runThrough = through; snapshot = JSON.stringify(n); if (new TextEncoder().encode(snapshot).length > 262144) throw Error('Notebook request exceeds 256 KiB. Reduce code or attached inputs.'); } catch (e) { notify(e.message); return; }
  const start = performance.now(); clearCellOutputs(); setBusy(true);

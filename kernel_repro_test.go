@@ -381,7 +381,7 @@ func TestRunThroughStillCompilesLaterCells(t *testing.T) {
 func TestRunThroughRejectsGoto(t *testing.T) {
 	n := notebookJSON(t, `"runThrough":1,"imports":["fmt"],"cells":[{"code":"goto later"},{"code":"later: fmt.Println(\"two\")"}]`)
 	r := (Kernel{}).Run(context.Background(), n)
-	if !strings.Contains(r.Error, "Run to here does not support goto; use Run all") || r.Stdout != "" {
+	if !strings.Contains(r.Error, "Run to here does not support goto; use a fresh full run") || r.Stdout != "" {
 		t.Fatalf("goto escaped selected cell: %+v", r)
 	}
 }

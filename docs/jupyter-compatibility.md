@@ -8,12 +8,13 @@ not a claim of compatibility with a particular Jupyter release.
 | --- | --- |
 | Code cells and shared variables | One compiled Go main function; cells share lexical scope |
 | Output under each cell | Text, stderr, supported figures/tables/files; one run, no repeated side effects |
-| Run through a cell | Fresh process executes the selected prefix; later cells still compile |
+| Run cell | Auto-starts resident kernel, sends exactly one command; unavailable prerequisites are reported without replay |
+| Run all | Explicit sequential execution in resident memory; legacy fresh process available in Kernel controls |
 | Interactive debugger | Real Delve, gutter breakpoint selection, source line, local values, stack, stepping and pause |
 | DataFrames and plots | Versioned Go modules, sheetframe example, chartframe figures |
 | Dependency provenance | Exact direct module versions, recorded go.mod/go.sum and compiler metadata |
 | Save and reopen experiments | GoBook JSON bundles; imported results are explicitly unverified |
-| Persistent kernel | Optional resident compiled Go worker; repeat cells with native RAM, explicit restart after source edits |
+| Persistent kernel | Default auto-started compiled Go worker; repeat cells with native RAM, explicit restart after source edits |
 | Cell graph | Conservative lexical dependencies; no automatic parallel cell scheduler |
 | Desktop packages | Linux/Windows portable hosts and browser workspace; local Go required |
 | Markdown/math cells | Not implemented |

@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "title": "Shared data, functions and return values",
+  "note": "Run cell 1 once, then cell 2 twice. Run cell 3 and repeat cell 2: the closure and slice remain in native RAM. Cell runs do not replay earlier cells. Source changes require an explicit restart.",
+  "imports": [
+    "fmt"
+  ],
+  "cells": [
+    {
+      "code": "// This allocation and function definition execute only when you run cell 1.\ndata := []float64{12, 15, 18, 21}\noriginal := &data[0]\nsetupRuns := 1\ncalls := 0\nmean := func(values []float64) (float64, error) {\n    if len(values) == 0 { return 0, fmt.Errorf(\"mean requires a nonempty sample\") }\n    calls++\n    total := 0.0\n    for _, value := range values { total += value }\n    return total / float64(len(values)), nil\n}\nfmt.Println(\"setup once\")"
+    },
+    {
+      "code": "// Repeat this cell: mean, data and its captured counter remain in RAM.\nvalue, err := mean(data)\nif err != nil { panic(err) }\nfmt.Printf(\"mean=%.1f calls=%d setup=%d same=%t\\n\", value, calls, setupRuns, original == &data[0])"
+    },
+    {
+      "code": "// The previous return value is available here, without calling mean again.\nfmt.Printf(\"previous=%.1f\\n\", value)\ndata[0] = 24\nfmt.Println(\"Updated the existing slice. Run cell 2 again to compute its new mean.\")"
+    }
+  ]
+}

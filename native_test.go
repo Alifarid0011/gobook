@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -478,5 +479,35 @@ func TestNativeStopWaitsForPreparation(t *testing.T) {
 	}
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {
 		t.Fatal("preparation directory retained")
+	}
+}
+
+func TestNativeIntegrationSharedFunctionExample(t *testing.T) {
+	data, err := os.ReadFile("examples/functions.gobook.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var n Notebook
+	if err = json.Unmarshal(data, &n); err != nil {
+		t.Fatal(err)
+	}
+	m := nativeStartTest(t, n, Kernel{})
+	for _, step := range []struct {
+		cell int
+		want string
+	}{
+		{1, "setup once\n"},
+		{2, "mean=16.5 calls=1 setup=1 same=true\n"},
+		{2, "mean=16.5 calls=2 setup=1 same=true\n"},
+		{3, "previous=16.5\nUpdated the existing slice. Run cell 2 again to compute its new mean.\n"},
+		{2, "mean=19.5 calls=3 setup=1 same=true\n"},
+	} {
+		got := nativeRunTest(t, m, n, step.cell)
+		if got.Result.Stdout != step.want {
+			t.Fatalf("cell %d: %q; want %q", step.cell, got.Result.Stdout, step.want)
+		}
+	}
+	if got := m.State().History; !reflect.DeepEqual(got, []int{1, 2, 2, 3, 2}) {
+		t.Fatalf("unexpected replay: %v", got)
 	}
 }

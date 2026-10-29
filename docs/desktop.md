@@ -22,9 +22,9 @@ Download and verify the archive for your OS and processor from
 Linux:
 
 ```sh
-sha256sum -c gobook-v0.6.0-linux-amd64.tar.gz.sha256
-tar -xzf gobook-v0.6.0-linux-amd64.tar.gz
-cd gobook-v0.6.0-linux-amd64
+sha256sum -c gobook-v0.7.0-linux-amd64.tar.gz.sha256
+tar -xzf gobook-v0.7.0-linux-amd64.tar.gz
+cd gobook-v0.7.0-linux-amd64
 ./install.sh
 ```
 
@@ -36,8 +36,8 @@ session does not need the same PATH as your terminal. No root privileges are use
 Windows PowerShell, from the extracted directory:
 
 ```powershell
-(Get-FileHash .\gobook-v0.6.0-windows-amd64.zip -Algorithm SHA256).Hash
-Get-Content .\gobook-v0.6.0-windows-amd64.zip.sha256
+(Get-FileHash .\gobook-v0.7.0-windows-amd64.zip -Algorithm SHA256).Hash
+Get-Content .\gobook-v0.7.0-windows-amd64.zip.sha256
 # Compare the hashes, then extract and run the installer in its directory:
 .\Install-GoBook.ps1
 ```

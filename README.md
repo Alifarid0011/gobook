@@ -25,11 +25,11 @@ absent host. Use the installed **GoBook Local** menu entry for automatic startup
 Install Go 1.25 or newer:
 
 ```sh
-go install github.com/Alifarid0011/gobook@v0.6.0
+go install github.com/Alifarid0011/gobook@v0.7.0
 gobook
 ```
 
-If your Go binary directory is not on PATH, use `go run github.com/Alifarid0011/gobook@v0.6.0` instead.
+If your Go binary directory is not on PATH, use `go run github.com/Alifarid0011/gobook@v0.7.0` instead.
 
 Or run from a source checkout:
 
@@ -85,7 +85,9 @@ keeps its output tied to the earlier source snapshot.
 
 All code cells are concatenated inside one `func main()`. Variables declared in an earlier cell are available below it. Imports belong in the explicit imports field; top-level function/type declarations can be written as local function values/types where Go permits. Standard Go compile rules apply, including unused imports. Build errors identify `cell1.go`, `cell2.go`, and so on.
 
-Every run compiles and launches a fresh process in a fresh temporary directory. **Run all repeats every cell and every side effect.** Each cell also has **Run to here**: it executes cells 1 through that cell in a fresh process. The whole notebook is compiled, so syntax/type errors in later cells can still block a run. Partial runs require complete statements in each cell and do not support `goto`; use Run all for code with cross-cell blocks or jumps. This keeps Go imports and references valid; it is not a persistent REPL or isolated cell execution. There is no interrupt button or live output streaming.
+**Run cell** and Shift+Enter automatically start a native memory kernel and execute only the selected cell. Earlier cells are never replayed automatically. Run prerequisite cells explicitly first; **Run all** explicitly executes all cells in order in the resident worker. Values and function values stay in RAM until Stop, restart, timeout or process exit. Editing execution inputs still requires an explicit restart.
+
+The whole notebook is compiled once at startup, so syntax/type errors in later cells can block startup. Native cells require complete statements without `goto`. **Kernel → Run all in a fresh process**, available after stopping a live memory kernel, retains the legacy concatenated execution path for cross-cell blocks. This is not a full Jupyter REPL: arbitrary source redefinition, cell reordering and arbitrary execution beyond the native frontier are not implemented.
 
 Use **Notebook / Code / Results** to show inline outputs, code only, or aggregate results. On small screens the notebook keeps output beside its source. Figure expansion supports keyboard dismissal. Results and figures can be downloaded individually.
 
@@ -214,7 +216,7 @@ exact behavior and the next milestones. Full Jupyter parity is not implemented.
 
 ### Native memory sessions
 
-Open **Kernel → Start memory kernel** to compile once and retain native values
+Use **Run cell** to start automatically, or **Kernel → Start memory kernel**, to retain native values
 between cell commands. Try **Memory & goroutines**: repeat cell 2 to increment a
 counter without reallocating the shared slice; run cell 3, then cell 2 to observe
 its mutation. The example uses a synchronized worker pool with ordered results.
@@ -229,3 +231,18 @@ relationships; it does not schedule cells concurrently.
 [Portable Linux and Windows packages](docs/desktop.md) launch the same workspace
 in your browser. They require Go on the host; native dependencies remain the
 responsibility of the imported modules.
+
+
+### Functions and single-cell runs
+
+Load **Shared functions & data**. Run cell 1 once, cell 2 twice, then cell 3 and
+cell 2. The mean function captures its call counter; the dataset retains its
+address and the previous return value is available in the next cell. Repeated
+cell 2 execution does not repeat cell 1 allocation. Unchanged earlier cell
+outputs keep their DOM nodes, including tables and figures.
+
+Reusable closures use ordinary Go function values, for example
+`mean := func(values []float64) (float64, error) { /* ... */ }`.
+Package-level `func Mean(...)` declarations are not supported inside these
+statement cells; use function values or imported Go packages. The static cell
+graph does not automatically execute or parallelize prerequisites.
