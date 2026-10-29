@@ -13,11 +13,11 @@ Built by [Ali Farid](https://github.com/Alifarid0011).
 Install Go 1.25 or newer:
 
 ```sh
-go install github.com/Alifarid0011/gobook@v0.2.0
+go install github.com/Alifarid0011/gobook@v0.3.0
 gobook
 ```
 
-If your Go binary directory is not on PATH, use `go run github.com/Alifarid0011/gobook@v0.2.0` instead.
+If your Go binary directory is not on PATH, use `go run github.com/Alifarid0011/gobook@v0.3.0` instead.
 
 Or run from a source checkout:
 
@@ -48,6 +48,19 @@ The browser layout adapts to small screens. The Go compiler and server run on a 
 
 ## Use
 
+The editor highlights Go keywords, strings, comments, numbers and function calls.
+**Appearance settings** changes paper/dark theme, code size, indentation and line
+wrapping. These settings stay in browser storage; source and host tokens are not
+saved with them. Scrollbars remain visible with quieter colors.
+
+The **DataFrame to trained model** example uses the real CC0 Palmer Penguins
+dataset through **sheetframe v0.2.0**. It shows `Shape`, `Schema` and `Head(8)`,
+explicitly counts exclusions for missing measurements, shuffles paired rows with
+a fixed seed, fits only training rows and compares held-out errors with a
+training-mean baseline. [Source, split, results and limitations](docs/examples/penguins.md).
+The tables, model, predictions and diagnostic charts can all be inspected or saved.
+
+
 1. Choose **Describe a sample**, **Explore a relationship**, **Inspect a distribution**, or **Train & save a model**. Loading an example never runs it.
 2. Replace the synthetic sample data with your own, and give the notebook a title and note.
 3. List package imports, separated by commas. Use package paths without aliases.
@@ -63,6 +76,25 @@ All code cells are concatenated inside one `func main()`. Variables declared in 
 Every run compiles and launches a fresh process in a fresh temporary directory. **Run all repeats every cell and every side effect.** Each cell also has **Run to here**: it executes cells 1 through that cell in a fresh process. The whole notebook is compiled, so syntax/type errors in later cells can still block a run. Partial runs require complete statements in each cell and do not support `goto`; use Run all for code with cross-cell blocks or jumps. This keeps Go imports and references valid; it is not a persistent REPL or isolated cell execution. There is no interrupt button or live output streaming.
 
 Use **Both / Code / Results** to choose a layout. On small screens the interface brings completed results into view unless you are still editing. Figure expansion supports keyboard dismissal. Results and figures can be downloaded individually.
+
+### Debug a notebook
+
+Install the optional [Delve](https://github.com/go-delve/delve) CLI, or choose its
+path with `gobook -delve /absolute/path/to/dlv`. Choose **Debug**, select a cell and
+executable line, then **Start debugging**. Continue, Next, Step in, Step out, Pause
+and Stop operate on a real Delve session. Local variables, arguments, call stack,
+source location and captured output update while you work. Normal notebook runs
+do not require Delve. Debug builds disable compiler optimizations and are not a
+performance measurement.
+
+Code and attached inputs stay locked to the debugging snapshot. After a page
+reload, an existing session can be stopped; its source is not restored into the
+new page, and stepping is disabled there to avoid showing misleading locations.
+Sessions expire after 15 minutes. Stop or normal server shutdown cleans up the
+inferior process and temporary files. Platform debugging permissions can prevent
+launch; GoBook reports that error rather than simulating a debugger. Real runtime
+verification was performed on Linux; macOS/Windows debug runtime is not claimed.
+See [debugger details](docs/debugger.md).
 
 ### Save and replay an experiment
 
@@ -135,6 +167,13 @@ go build ./...
 ```
 
 Tests exercise real compilation, syntax errors, bounded output, timeouts, artifact handling, imports, JSON round trips, and API request guards. CI is configured for Go 1.25 on Linux, macOS, and Windows; configured jobs are not evidence that those jobs have run.
+
+## Extend GoBook
+
+Use ordinary versioned Go modules. The [library guide](docs/extensions.md) explains
+dependency pins, table/image/data outputs, model schemas and cleanup. This release
+does not implement Jupyter kernel protocol compatibility, persistent REPL state,
+Markdown cells, interactive widget packages or Jupyter's extension ecosystem.
 
 ## Research and citation
 

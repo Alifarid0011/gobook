@@ -11,13 +11,16 @@ import (
 	"sync"
 )
 
-//go:embed ui.html ui.css examples/*.gobook.json
+//go:embed ui.html ui.css editor.js debug_ui.js examples/*.gobook.json
 var ui embed.FS
 
 type Server struct {
 	Token, Host  string
 	PublicOrigin string
 	Kernel       Kernel
+	Debugger     *DebugManager
+	debugMu      sync.Mutex
+	debugActive  bool
 	mu           sync.Mutex
 	busy         bool
 }
@@ -69,7 +72,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(appJS))
 		return
 	}
-	if r.Method == http.MethodGet && (r.URL.Path == "/ui.css" || strings.HasPrefix(r.URL.Path, "/examples/")) {
+	if r.Method == http.MethodGet && (r.URL.Path == "/ui.css" || r.URL.Path == "/editor.js" || r.URL.Path == "/debug_ui.js" || strings.HasPrefix(r.URL.Path, "/examples/")) {
 		b, err := ui.ReadFile(strings.TrimPrefix(r.URL.Path, "/"))
 		if err != nil {
 			http.NotFound(w, r)
@@ -79,8 +82,15 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/ui.css" {
 			mime = "text/css; charset=utf-8"
 		}
+		if r.URL.Path == "/editor.js" || r.URL.Path == "/debug_ui.js" {
+			mime = "text/javascript; charset=utf-8"
+		}
 		w.Header().Set("Content-Type", mime)
 		w.Write(b)
+		return
+	}
+	if strings.HasPrefix(r.URL.Path, "/api/debug/") {
+		s.debugHTTP(w, r)
 		return
 	}
 	if r.URL.Path != "/api/run" {
@@ -124,6 +134,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 400)
 		return
 	}
+	s.releaseExpiredDebug(r.Context())
 	s.mu.Lock()
 	if s.busy {
 		s.mu.Unlock()

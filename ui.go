@@ -6,7 +6,24 @@ const $ = id => document.getElementById(id);
 let token = new URL(location.href).searchParams.get('token') || sessionStorage.getItem('gobook-token') || '';
 sessionStorage.setItem('gobook-token', token);
 history.replaceState(null, '', '/');
-let busy = false, changed = false, loadingExample = false, lastText = '', inputFiles = [], lastExperiment = null, toastTimer, runTimer;
+let debugging = false, busy = false, changed = false, loadingExample = false, lastText = '', inputFiles = [], lastExperiment = null, toastTimer, runTimer;
+const editorViews = new WeakMap();
+let preferences = {theme:'paper',font:14,indent:4,wrap:false};
+try { const saved = JSON.parse(localStorage.getItem('gobook.preferences.v1') || '{}'); preferences = {...preferences,...saved}; } catch {}
+function applyPreferences() {
+ if (!['paper','dark'].includes(preferences.theme)) preferences.theme = 'paper';
+ if (![12,14,16,18,20].includes(preferences.font)) preferences.font = 14;
+ if (![2,4,8].includes(preferences.indent)) preferences.indent = 4;
+ preferences.wrap = preferences.wrap === true;
+ document.documentElement.dataset.theme = preferences.theme; document.body.dataset.wrap = String(preferences.wrap);
+ document.documentElement.style.setProperty('--editor-size', preferences.font+'px'); document.documentElement.style.setProperty('--editor-indent', preferences.indent);
+ for (const key of ['theme','font','indent','wrap']) $('pref-'+key).value = String(preferences[key]);
+ document.querySelectorAll('.cell textarea').forEach(editor => { editor.style.tabSize = preferences.indent; editor.wrap = preferences.wrap ? 'soft' : 'off'; editorViews.get(editor)?.refresh(); });
+ try { localStorage.setItem('gobook.preferences.v1',JSON.stringify(preferences)); } catch {}
+}
+$('appearance').onclick = () => { $('preferences').hidden = !$('preferences').hidden; $('appearance').setAttribute('aria-expanded',String(!$('preferences').hidden)); };
+for (const key of ['theme','font','indent','wrap']) $('pref-'+key).onchange = () => { preferences[key] = key === 'font' || key === 'indent' ? Number($('pref-'+key).value) : key === 'wrap' ? $('pref-wrap').value === 'true' : $('pref-theme').value; applyPreferences(); };
+applyPreferences();
 function setView(view) {
  document.body.dataset.view = view;
  document.querySelectorAll('button[data-view]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.view === view)));
@@ -40,7 +57,7 @@ function showFiles() {
  $('input-files').replaceChildren();
  inputFiles.forEach((file, i) => {
   const row = document.createElement('li'); const label = document.createElement('span'); label.textContent = file.name;
-  const remove = document.createElement('button'); remove.textContent = 'Remove input'; remove.disabled = busy || loadingExample;
+  const remove = document.createElement('button'); remove.textContent = 'Remove input'; remove.disabled = busy || debugging || loadingExample;
   remove.onclick = () => { inputFiles.splice(i, 1); showFiles(); markChanged(); }; row.append(label, remove); $('input-files').append(row);
  });
 }
@@ -56,7 +73,7 @@ function attachFiles(files) {
  inputFiles = merged; showFiles(); markChanged();
 }
 $('data-files').onchange = async () => {
- const files = [...$('data-files').files]; if (!files.length || busy || loadingExample) return;
+ const files = [...$('data-files').files]; if (!files.length || busy || debugging || loadingExample) return;
  loadingExample = true; setBusy(false);
  try {
   if (files.some(f => f.size > 131072)) throw Error('Input files exceed 128 KiB.');
@@ -76,8 +93,9 @@ function notify(message) {
 }
 function setStatus(message, state = '') { $('status').textContent = message; $('status').dataset.state = state; }
 function updateConnection() {
- $('run').disabled = busy || loadingExample || !token;
- document.querySelectorAll('.run-cell').forEach(button => button.disabled = busy || loadingExample || !token);
+ $('run').disabled = busy || debugging || loadingExample || !token;
+ $('debug-start').disabled = busy || loadingExample || !token;
+ document.querySelectorAll('.run-cell').forEach(button => button.disabled = busy || debugging || loadingExample || !token);
  $('kernel-dot').classList.toggle('connected', Boolean(token));
  $('kernel-label').textContent = token ? 'Local host configured' : 'Host not connected';
 }
@@ -129,11 +147,14 @@ function addCell(code = '', focus = false) {
  editor.addEventListener('input', () => { updateLines(); markChanged(); });
  editor.addEventListener('scroll', () => { lines.scrollTop = editor.scrollTop; });
  editor.addEventListener('keydown', e => {
+  if (editor.readOnly) return;
   if (e.key === 'Enter' && e.shiftKey && !e.ctrlKey && !e.metaKey) { e.preventDefault(); runNotebook([...$('cells').children].indexOf(section) + 1); return; }
-  if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); editor.setRangeText('\t', editor.selectionStart, editor.selectionEnd, 'end'); updateLines(); markChanged(); }
+  if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); editor.setRangeText(' '.repeat(preferences.indent), editor.selectionStart, editor.selectionEnd, 'end'); updateLines(); editorViews.get(editor)?.refresh(); markChanged(); }
  });
  const foot = document.createElement('div'); foot.className = 'cell-foot'; foot.textContent = 'Shift Enter · Run to here repeats earlier cells in a fresh process';
  wrap.append(lines, editor); section.append(head, wrap, foot); $('cells').append(section); updateLines(); renumber();
+ editor.style.tabSize = preferences.indent; editor.wrap = preferences.wrap ? 'soft' : 'off';
+ editorViews.set(editor, GoBookEditor.attach(wrap, editor));
  editor.style.height = Math.min(420, Math.max(128, (code.split('\n').length + 2) * 20)) + 'px';
  if (focus) { editor.focus(); section.scrollIntoView({ block: 'nearest' }); }
 }
@@ -143,7 +164,7 @@ function renumber() {
   cell.id = 'cell-' + (i + 1); cell.querySelector('.cell-label').textContent = 'CELL ' + String(i + 1).padStart(2, '0');
   cell.querySelector('textarea').setAttribute('aria-label', 'Go code cell ' + (i + 1));
   cell.querySelector('[aria-label="Move cell up"]').disabled = i === 0; cell.querySelector('[aria-label="Move cell down"]').disabled = i === cells.length - 1;
-  cell.querySelector('.run-cell').disabled = busy || loadingExample || !token;
+  cell.querySelector('.run-cell').disabled = busy || debugging || loadingExample || !token;
   const item = document.createElement('button'); const number = document.createElement('em'); number.textContent = String(i + 1).padStart(2, '0');
   item.append(number, document.createTextNode('Code cell ' + (i + 1))); item.onclick = () => { setView('code'); cell.scrollIntoView({ block: 'center' }); cell.querySelector('textarea').focus({ preventScroll: true }); };
   $('outline').append(item);
@@ -182,7 +203,7 @@ $('new').onclick = () => {
 };
 $('sidebar-new').onclick = () => $('new').click();
 document.querySelectorAll('[data-example]').forEach(button => button.onclick = async () => {
- if (busy || loadingExample) return;
+ if (busy || debugging || loadingExample) return;
  if (changed && !confirm('Load this example? Download your current notebook first if you want to keep it.')) return;
  loadingExample = true; setBusy(false); $('example-status').textContent = 'Loading example…';
  try {
@@ -230,6 +251,19 @@ function validateResult(result) {
   total += a.data.length; if (total > 12*1024*1024) throw Error('Experiment artifacts exceed the import limit');
  }
 }
+function tablePreview(artifact) {
+ if (artifact.mime !== 'application/json' || artifact.data.length > 524288) return null;
+ try {
+  const value = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(artifact.data),c => c.charCodeAt(0))));
+  if (value.format !== 'gobook.table.v1' || !Array.isArray(value.columns) || value.columns.length > 50 || !value.columns.length || !value.columns.every(c => typeof c === 'string') || !Array.isArray(value.rows) || value.rows.length > 200 || !value.rows.every(row => Array.isArray(row) && row.length === value.columns.length && row.every(v => v === null || ['string','number','boolean'].includes(typeof v)))) return null;
+  const container = document.createElement('div'); container.className = 'dataframe-view'; container.tabIndex = 0; container.setAttribute('role','region'); container.setAttribute('aria-label', typeof value.title === 'string' ? value.title : 'DataFrame preview');
+  const table = document.createElement('table'); const caption = document.createElement('caption'); caption.textContent = (typeof value.title === 'string' ? value.title : 'DataFrame preview') + ' · '+value.rows.length+' rows shown × '+value.columns.length+' columns';
+  const head = document.createElement('thead'); const header = document.createElement('tr'); const index = document.createElement('th'); index.textContent = '#'; header.append(index);
+  for (const name of value.columns) { const cell = document.createElement('th'); cell.scope = 'col'; cell.textContent = name; header.append(cell); } head.append(header);
+  const body = document.createElement('tbody'); value.rows.forEach((row,i) => { const tr = document.createElement('tr'); const number = document.createElement('th'); number.scope='row'; number.textContent=String(i); tr.append(number); for (const v of row) { const td = document.createElement('td'); td.textContent = v === null ? '—' : String(v); tr.append(td); } body.append(tr); });
+  table.append(caption,head,body); container.append(table); return container;
+ } catch { return null; }
+}
 function renderResult(result) {
  validateResult(result); $('output').replaceChildren();
   textOutput('STANDARD OUTPUT', result.stdout); textOutput('BUILD & RUN DIAGNOSTICS', result.stderr); textOutput('EXECUTION ERROR', result.error, true);
@@ -241,10 +275,12 @@ function renderResult(result) {
    const img = document.createElement('img'); img.alt = artifact.name; img.src = uri;
    const actions = document.createElement('div'); actions.className = 'figure-actions';
    const expand = document.createElement('button'); expand.textContent = 'Expand figure'; expand.onclick = () => { $('figure-title').textContent = artifact.name; $('expanded-figure').src = img.src; $('expanded-figure').alt = artifact.name; $('figure-dialog').showModal(); };
-   const save = document.createElement('a'); save.href = img.src; save.download = artifact.name; save.textContent = artifact.mime.startsWith('image/') ? '↓ Download figure' : '↓ Download file'; if (artifact.mime.startsWith('image/')) { actions.append(expand, save); figure.append(caption, img, actions); }
+   const save = document.createElement('button'); save.type = 'button'; save.textContent = artifact.mime.startsWith('image/') ? '↓ Download figure' : '↓ Download file';
+   save.onclick = event => { event.preventDefault(); download(Uint8Array.from(atob(artifact.data), c => c.charCodeAt(0)), artifact.name, artifact.mime); };
+   if (artifact.mime.startsWith('image/')) { actions.append(expand, save); figure.append(caption, img, actions); }
    else {
-    const use = document.createElement('button'); use.textContent = 'Use as input'; use.onclick = () => { try { attachFiles([{name: artifact.name, data: artifact.data}]); notify('Attached to the current notebook. It will be available on the next run.'); } catch (e) { notify(e.message); } };
-    const description = document.createElement('p'); description.className = 'file-description'; description.textContent = 'Generated data or model file'; actions.append(use, save); figure.append(caption, description, actions);
+    const use = document.createElement('button'); use.className = 'use-artifact'; use.textContent = 'Use as input'; use.onclick = () => { if (busy || debugging || loadingExample) { notify('Stop the current session before changing its inputs.'); return; } try { attachFiles([{name: artifact.name, data: artifact.data}]); notify('Attached to the current notebook. It will be available on the next run.'); } catch (e) { notify(e.message); } };
+    const description = document.createElement('p'); description.className = 'file-description'; description.textContent = 'Generated data or model file'; actions.append(use, save); figure.append(caption, tablePreview(artifact) || description, actions);
    }
    $('output').append(figure);
   }
@@ -253,15 +289,16 @@ function renderResult(result) {
 }
 function setBusy(value) {
  busy = value; document.body.classList.toggle('running', value); $('run-label').textContent = value ? 'Running' : 'Run all';
- for (const id of ['new', 'load', 'add', 'sidebar-new', 'data-files']) $(id).disabled = value || loadingExample;
- for (const id of ['title','note','imports','dependencies']) $(id).readOnly = loadingExample;
- document.querySelectorAll('.cell textarea').forEach(editor => editor.readOnly = loadingExample);
- document.querySelectorAll('[data-example]').forEach(button => button.disabled = value || loadingExample);
- document.querySelectorAll('.cell-actions button').forEach(b => b.disabled = value || loadingExample);
- if (!value && !loadingExample) renumber(); updateConnection(); showFiles(); $('output').setAttribute('aria-busy', String(value));
+ for (const id of ['new', 'load', 'add', 'sidebar-new', 'data-files']) $(id).disabled = value || debugging || loadingExample;
+ for (const id of ['title','note','imports','dependencies']) $(id).readOnly = loadingExample || debugging;
+ document.querySelectorAll('.cell textarea').forEach(editor => editor.readOnly = loadingExample || debugging);
+ document.querySelectorAll('[data-example]').forEach(button => button.disabled = value || debugging || loadingExample);
+ document.querySelectorAll('.cell-actions button').forEach(b => b.disabled = value || debugging || loadingExample);
+ document.querySelectorAll('.use-artifact').forEach(b => b.disabled = value || debugging || loadingExample);
+ if (!value && !loadingExample && !debugging) renumber(); updateConnection(); showFiles(); $('output').setAttribute('aria-busy', String(value));
 }
 async function runNotebook(through = null) {
- if (busy || loadingExample || !token) return;
+ if (busy || debugging || loadingExample || !token) return;
  let snapshot, sourceSnapshot; try { const n = notebook(); sourceSnapshot = JSON.stringify(n); if (through !== null) n.runThrough = through; snapshot = JSON.stringify(n); if (new TextEncoder().encode(snapshot).length > 262144) throw Error('Notebook request exceeds 256 KiB. Reduce code or attached inputs.'); } catch (e) { notify(e.message); return; }
  const start = performance.now(); setBusy(true);
  exportText(); setExperiment();

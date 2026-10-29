@@ -53,6 +53,9 @@ func TestNotebookAssets(t *testing.T) {
 		status     int
 	}{
 		{"/ui.css", "text/css", 200},
+		{"/editor.js", "text/javascript", 200},
+		{"/debug_ui.js", "text/javascript", 200},
+		{"/examples/penguins.gobook.json", "application/json", 200},
 		{"/examples/summary.gobook.json", "application/json", 200},
 		{"/examples/regression.gobook.json", "application/json", 200},
 		{"/examples/distribution.gobook.json", "application/json", 200},

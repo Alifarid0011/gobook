@@ -2,7 +2,7 @@ cff-version: 1.2.0
 message: "If GoBook helps your research, please cite this software and record the exact version you used."
 type: software
 title: "GoBook: a Go workspace for reproducible computational experiments"
-version: 0.2.0
+version: 0.3.0
 date-released: '2026-10-29'
 authors:
   - family-names: Farid
