@@ -25,11 +25,11 @@ absent host. Use the installed **GoBook Local** menu entry for automatic startup
 Install Go 1.25 or newer:
 
 ```sh
-go install github.com/Alifarid0011/gobook@v0.8.0
+go install github.com/Alifarid0011/gobook@v0.8.1
 gobook
 ```
 
-If your Go binary directory is not on PATH, use `go run github.com/Alifarid0011/gobook@v0.8.0` instead.
+If your Go binary directory is not on PATH, use `go run github.com/Alifarid0011/gobook@v0.8.1` instead.
 
 Or run from a source checkout:
 

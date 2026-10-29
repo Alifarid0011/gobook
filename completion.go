@@ -323,6 +323,15 @@ func (c *CompletionManager) start(ctx context.Context, module string) error {
 	if err != nil {
 		return err
 	}
+	// Windows TEMP may contain an 8.3 alias such as RUNNER~1. Gopls rejects
+	// workspace components whose spelling differs from the filesystem. Resolve
+	// aliases/symlinks once, before constructing any workspace/document URI.
+	canonical, err := filepath.EvalSymlinks(c.dir)
+	if err != nil {
+		c.closeLocked()
+		return err
+	}
+	c.dir = canonical
 	if err = os.WriteFile(filepath.Join(c.dir, "go.mod"), []byte(module), 0600); err != nil {
 		c.closeLocked()
 		return err

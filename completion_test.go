@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -53,6 +54,10 @@ func TestGoplsIntegrationCompletion(t *testing.T) {
 	items, err := c.Complete(context.Background(), n, 2, 6)
 	if err != nil {
 		t.Fatal(err)
+	}
+	canonical, e := filepath.EvalSymlinks(c.dir)
+	if e != nil || c.dir != canonical {
+		t.Fatalf("non-canonical language-server workspace: %q -> %q (%v)", c.dir, canonical, e)
 	}
 	found := false
 	for _, item := range items {
