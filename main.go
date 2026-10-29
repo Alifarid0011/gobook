@@ -23,6 +23,7 @@ func main() {
 	chart := flag.String("chartframe", "", "local chartframe module (defaults to adjacent ../chartframe)")
 	external := flag.String("public-origin", "", "optional HTTPS reverse proxy origin, for example https://book.example")
 	delve := flag.String("delve", "dlv", "Delve executable for optional interactive debugging")
+	launch := flag.Bool("open", false, "open the local workspace in your default browser")
 	flag.Parse()
 	origin, err := publicOrigin(*external)
 	if err != nil {
@@ -58,16 +59,25 @@ func main() {
 		log.Fatal(err)
 	}
 	s := &Server{Token: hex.EncodeToString(token), Host: listener.Addr().String(), Kernel: Kernel{Chartframe: *chart}, PublicOrigin: origin}
+	s.Native = &NativeManager{Kernel: s.Kernel}
+	defer s.Native.Stop()
 	s.Debugger = &DebugManager{Kernel: s.Kernel, Delve: *delve}
 	defer s.Debugger.Stop()
 	fmt.Printf("GoBook — trusted local Go execution (full user permissions)\nOpen http://%s/?token=%s\n", s.Host, s.Token)
+	if *launch {
+		go func() {
+			if err := openBrowser(fmt.Sprintf("http://%s/?token=%s", s.Host, s.Token)); err != nil {
+				log.Printf("Browser launch: %v", err)
+			}
+		}()
+	}
 	if origin != "" {
 		fmt.Printf("Proxy capability URL: %s/?token=%s\n", origin, s.Token)
 	}
 	server := &http.Server{Handler: s, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 100 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
 	shutdown, cancelShutdown := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancelShutdown()
-	go func() { <-shutdown.Done(); _ = s.Debugger.Stop(); _ = server.Close() }()
+	go func() { <-shutdown.Done(); _ = s.Debugger.Stop(); _ = s.Native.Stop(); _ = server.Close() }()
 	if err = server.Serve(listener); err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
 	}

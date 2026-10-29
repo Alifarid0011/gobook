@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "title": "Native memory and a Go worker pool",
+  "note": "Start the memory kernel, then run cells 1 and 2. Run cell 3 and rerun cell 2: the data stays in RAM and the run counter increases. Source edits require Restart.",
+  "imports": [
+    "fmt",
+    "math",
+    "sync"
+  ],
+  "cells": [
+    {
+      "code": "// Allocate once. The resident kernel keeps this slice and counter.\ndata := []float64{4, 9, 16, 36, 49, 64}\nruns := 0\nfmt.Printf(\"Allocated %d values at %p\\n\", len(data), &data[0])"
+    },
+    {
+      "code": "// Repeating this cell keeps data and runs from the resident process.\n// Each index has one writer, and Wait establishes completion before reading.\nruns++\noutput := make([]float64, len(data))\njobs := make(chan int)\nvar workers sync.WaitGroup\nfor worker := 0; worker < 3; worker++ {\n    workers.Add(1)\n    go func() {\n        defer workers.Done()\n        for index := range jobs {\n            output[index] = math.Sqrt(data[index])\n        }\n    }()\n}\nfor index := range data { jobs <- index }\nclose(jobs)\nworkers.Wait()\nfmt.Printf(\"Run %d \u00b7 same data at %p\\n\", runs, &data[0])\nfmt.Printf(\"Square roots in original order: %v\\n\", output)"
+    },
+    {
+      "code": "// Mutation remains in RAM; rerun cell 2 to use it without reallocating data.\ndata[0] = 25\nfmt.Printf(\"Updated first value to %.0f at %p. Rerun cell 2.\\n\", data[0], &data[0])"
+    }
+  ]
+}

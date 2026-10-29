@@ -1,3 +1,5 @@
 /gobook
 /gobook.exe
 *.test
+
+/dist/

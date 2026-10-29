@@ -457,3 +457,34 @@ body[data-view="code"] .cell-output { display:none; }
 :root[data-theme="dark"] button:disabled { opacity:1; background:#1b3038; color:#819a9f; border-color:#35505a; }
 :root[data-theme="dark"] button:focus-visible,
 :root[data-theme="dark"] a:focus-visible { outline-color:#93dfc8; }
+.cell-graph { border:1px solid var(--line); padding:18px; background:var(--white); border-radius:10px; margin:16px 0; }
+.cell-graph .section-heading { flex-wrap:wrap; gap:12px; }
+.graph-warning { font-size:12px; color:var(--muted); line-height:1.7; max-width:85ch; }
+.graph-canvas { overflow:auto; max-height:560px; margin:16px 0; scrollbar-width:thin; }
+.graph-canvas svg { display:block; width:100%; min-width:650px; color:var(--teal); }
+.graph-canvas path { stroke:var(--teal); }
+.graph-canvas rect { fill:var(--paper); stroke:var(--line); }
+.graph-canvas g[role="button"] { cursor:pointer; }
+.graph-canvas g[role="button"]:hover rect { stroke:var(--teal); }
+.graph-node-title { fill:var(--ink); font:600 18px system-ui; }
+.graph-node-detail { fill:var(--muted); font:13px var(--mono); }
+#graph-edges { padding-left:20px; font-size:12px; }
+#graph-edges li { margin:8px 0; overflow-wrap:anywhere; }
+:root[data-theme="dark"] .graph-canvas { color:#9ed9bf; }
+:root[data-theme="dark"] .graph-canvas path { stroke:#9ed9bf; }
+@media(max-width:760px) { .toolbar #graph-toggle { font-size:12px; padding:8px; } }
+.memory-panel { border:1px solid var(--line); border-left:3px solid var(--teal); padding:18px; border-radius:9px; background:var(--white); margin:16px 0; }
+.memory-panel p,.memory-panel details { font-size:12px; color:var(--muted); line-height:1.8; }
+.memory-kind,#memory-identity { font:10px var(--mono); color:var(--muted); overflow-wrap:anywhere; }
+.memory-actions { display:flex; flex-wrap:wrap; gap:8px; margin:16px 0; }
+.memory-actions button { min-height:42px; font-size:12px; }
+#memory-state { color:var(--teal); font:12px var(--mono); }
+#memory-error { white-space:pre-wrap; overflow-wrap:anywhere; font-size:12px; color:#ba584d; background:transparent; }
+#memory-error:empty { display:none; }
+:root[data-theme="dark"] #memory-state { color:#9ed9bf; }
+.toolbar { flex-wrap:wrap; }
+.topbar { height:auto; min-height:78px; padding-top:12px; padding-bottom:12px; }
+@media(max-width:760px) { .toolbar #memory-toggle { font-size:12px; padding:8px; } .topbar { min-height:64px; } }
+#memory-files { list-style:none; padding:0; }
+#memory-files li { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; padding:8px 0; border-bottom:1px solid var(--line); font:12px var(--mono); }
+#memory-files button { font:12px system-ui; }

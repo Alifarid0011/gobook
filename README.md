@@ -13,11 +13,11 @@ Built by [Ali Farid](https://github.com/Alifarid0011).
 Install Go 1.25 or newer:
 
 ```sh
-go install github.com/Alifarid0011/gobook@v0.4.0
+go install github.com/Alifarid0011/gobook@v0.5.0
 gobook
 ```
 
-If your Go binary directory is not on PATH, use `go run github.com/Alifarid0011/gobook@v0.4.0` instead.
+If your Go binary directory is not on PATH, use `go run github.com/Alifarid0011/gobook@v0.5.0` instead.
 
 Or run from a source checkout:
 
@@ -172,7 +172,7 @@ Tests exercise real compilation, syntax errors, bounded output, timeouts, artifa
 
 Use ordinary versioned Go modules. The [library guide](docs/extensions.md) explains
 dependency pins, table/image/data outputs, model schemas and cleanup. This release
-does not implement Jupyter kernel protocol compatibility, persistent REPL state,
+does not implement Jupyter kernel protocol compatibility, arbitrary live-value migration,
 Markdown cells, interactive widget packages or Jupyter's extension ecosystem.
 
 ## Research and citation
@@ -198,3 +198,22 @@ The dock adapts to a stacked layout on narrow displays.
 
 See [capabilities and remaining Jupyter work](docs/jupyter-compatibility.md) for
 exact behavior and the next milestones. Full Jupyter parity is not implemented.
+
+
+### Native memory sessions
+
+Open **Kernel → Start memory kernel** to compile once and retain native values
+between cell commands. Try **Memory & goroutines**: repeat cell 2 to increment a
+counter without reallocating the shared slice; run cell 3, then cell 2 to observe
+its mutation. The example uses a synchronized worker pool with ordered results.
+
+Editing execution inputs requires an explicit restart. Undoing those edits allows
+the original worker to continue. Stop, a crash, or a command timeout discards RAM;
+saved experiments contain source, results and command history, not a memory image.
+See [native execution semantics](docs/native-memory.md) before relying on repeated
+side effects or background work. **Cell graph** shows conservative lexical
+relationships; it does not schedule cells concurrently.
+
+[Portable Linux and Windows packages](docs/desktop.md) launch the same workspace
+in your browser. They require Go on the host; native dependencies remain the
+responsibility of the imported modules.

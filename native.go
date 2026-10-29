@@ -25,16 +25,20 @@ import (
 const nativeHistoryLimit = 1000
 
 type NativeSnapshot struct {
-	Active      bool    `json:"active"`
-	Ready       bool    `json:"ready"`
-	CurrentCell int     `json:"currentCell"`
-	NextCell    int     `json:"nextCell"`
-	HeapAlloc   uint64  `json:"heapAlloc"`
-	Goroutines  int     `json:"goroutines"`
-	Fingerprint string  `json:"fingerprint"`
-	History     []int   `json:"history"`
-	Result      *Result `json:"result,omitempty"`
-	Error       string  `json:"error,omitempty"`
+	// CommandAccepted describes only the execute response, never stored state.
+	CommandAccepted bool       `json:"commandAccepted,omitempty"`
+	SessionID       string     `json:"sessionId"`
+	Files           []Artifact `json:"files"`
+	Active          bool       `json:"active"`
+	Ready           bool       `json:"ready"`
+	CurrentCell     int        `json:"currentCell"`
+	NextCell        int        `json:"nextCell"`
+	HeapAlloc       uint64     `json:"heapAlloc"`
+	Goroutines      int        `json:"goroutines"`
+	Fingerprint     string     `json:"fingerprint"`
+	History         []int      `json:"history"`
+	Result          *Result    `json:"result,omitempty"`
+	Error           string     `json:"error,omitempty"`
 }
 
 type NativeManager struct {
@@ -232,6 +236,9 @@ func (s *nativeSession) view() NativeSnapshot {
 	defer s.mu.Unlock()
 	snap := s.snapshot
 	snap.History = append([]int{}, snap.History...)
+	if snap.Files != nil {
+		snap.Files = append([]Artifact{}, snap.Files...)
+	}
 	// JSON cloning keeps callers from mutating the resident session's result.
 	if snap.Result != nil {
 		data, _ := json.Marshal(snap.Result)
@@ -274,7 +281,8 @@ func (m *NativeManager) Start(ctx context.Context, n Notebook) (snap NativeSnaps
 	s.inputs = inputs
 	life, cancel := context.WithCancel(context.Background())
 	s.cancel = cancel
-	s.snapshot = NativeSnapshot{Fingerprint: nativeFingerprint(n), History: []int{}}
+	id := sha256.Sum256([]byte(marker))
+	s.snapshot = NativeSnapshot{SessionID: hex.EncodeToString(id[:16]), Fingerprint: nativeFingerprint(n), History: []int{}, Files: []Artifact{}}
 	buildTimeout, runTimeout := m.Kernel.BuildTimeout, m.Kernel.RunTimeout
 	if buildTimeout == 0 {
 		buildTimeout = 60 * time.Second
@@ -442,6 +450,10 @@ func (m *NativeManager) Start(ctx context.Context, n Notebook) (snap NativeSnaps
 		return snap, err
 	}
 	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return snap, errors.New("native session stopped during startup")
+	}
 	s.snapshot.Active = true
 	s.snapshot.Ready = true
 	s.snapshot.NextCell = 1
@@ -511,6 +523,18 @@ func (s *nativeSession) resultLocked(cell int, duration time.Duration) *Result {
 	return r
 }
 func (m *NativeManager) Execute(ctx context.Context, n Notebook, cell int) (NativeSnapshot, error) {
+	return m.execute(ctx, n, cell, "", -1)
+}
+
+// ExecuteExpected rejects stale browser commands atomically with acquiring the
+// command slot, so another tab cannot silently change a command's input state.
+func (m *NativeManager) ExecuteExpected(ctx context.Context, n Notebook, cell int, sessionID string, historyLength int) (NativeSnapshot, error) {
+	if sessionID == "" || historyLength < 0 {
+		return m.State(), errors.New("session id and nonnegative history length are required")
+	}
+	return m.execute(ctx, n, cell, sessionID, historyLength)
+}
+func (m *NativeManager) execute(ctx context.Context, n Notebook, cell int, sessionID string, historyLength int) (NativeSnapshot, error) {
 	if !m.operation.TryLock() {
 		return m.State(), errors.New("native session is busy")
 	}
@@ -526,6 +550,8 @@ func (m *NativeManager) Execute(ctx context.Context, n Notebook, cell int) (Nati
 	switch {
 	case s.closed || !s.snapshot.Active || !s.snapshot.Ready:
 		err = errors.New("native session is not ready; restart explicitly")
+	case historyLength >= 0 && (sessionID != s.snapshot.SessionID || historyLength != len(s.snapshot.History)):
+		err = errors.New("native session changed in another page; refresh status and restore the kernel notebook")
 	case nativeFingerprint(n) != s.snapshot.Fingerprint:
 		err = errors.New("notebook source, imports, pins or inputs changed; restart required (live memory will be lost)")
 	case cell < 1 || cell > min(s.snapshot.NextCell, len(n.Cells)):
@@ -553,6 +579,7 @@ func (m *NativeManager) Execute(ctx context.Context, n Notebook, cell int) (Nati
 	_, err = fmt.Fprintf(conn, "%d\n", cell)
 	stop()
 	started := time.Now()
+	accepted := err == nil
 	if err == nil {
 		s.mu.Lock()
 		s.snapshot.History = append(s.snapshot.History, cell)
@@ -564,19 +591,30 @@ func (m *NativeManager) Execute(ctx context.Context, n Notebook, cell int) (Nati
 			err = fmt.Errorf("native run: %w", runCtx.Err())
 		}
 		s.fail(err)
-		return s.view(), err
+		snapshot := s.view()
+		snapshot.CommandAccepted = accepted
+		return snapshot, err
 	}
 	artifacts, artifactErr := collectArtifactsExcluding(s.dir, s.inputs)
 	changed := make([]Artifact, 0, len(artifacts))
+	currentHashes := make(map[string][32]byte, len(artifacts))
 	for _, artifact := range artifacts {
 		// collectArtifactsExcluding has already bounded and rooted the file reads.
 		sum := sha256.Sum256([]byte(artifact.Data))
 		if previous, ok := s.artifactHashes[artifact.Name]; !ok || previous != sum {
 			changed = append(changed, artifact)
 		}
-		s.artifactHashes[artifact.Name] = sum
+		currentHashes[artifact.Name] = sum
+	}
+	if artifactErr == nil {
+		s.artifactHashes = currentHashes
 	}
 	s.mu.Lock()
+	if artifactErr == nil {
+		s.snapshot.Files = append([]Artifact{}, artifacts...)
+	} else {
+		s.snapshot.Files = nil
+	}
 	s.snapshot.CurrentCell = cell
 	s.snapshot.NextCell = min(cell+1, len(n.Cells))
 	s.snapshot.Ready = !s.closed
@@ -588,7 +626,9 @@ func (m *NativeManager) Execute(ctx context.Context, n Notebook, cell int) (Nati
 		s.snapshot.Error = artifactErr.Error()
 	}
 	s.mu.Unlock()
-	return s.view(), artifactErr
+	snapshot := s.view()
+	snapshot.CommandAccepted = true
+	return snapshot, artifactErr
 }
 
 func (s *nativeSession) fail(err error) {

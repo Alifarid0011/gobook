@@ -13,7 +13,9 @@ not a claim of compatibility with a particular Jupyter release.
 | DataFrames and plots | Versioned Go modules, sheetframe example, chartframe figures |
 | Dependency provenance | Exact direct module versions, recorded go.mod/go.sum and compiler metadata |
 | Save and reopen experiments | GoBook JSON bundles; imported results are explicitly unverified |
-| Persistent kernel | Not implemented; every normal run starts a fresh process |
+| Persistent kernel | Optional resident compiled Go worker; repeat cells with native RAM, explicit restart after source edits |
+| Cell graph | Conservative lexical dependencies; no automatic parallel cell scheduler |
+| Desktop packages | Linux/Windows portable hosts and browser workspace; local Go required |
 | Markdown/math cells | Not implemented |
 | Go language server completion | Not implemented; current highlighting is lexical |
 | Jupyter kernel protocol and ipynb | Not implemented |
@@ -44,7 +46,7 @@ without attaching it to modified cells. Opening a bundle never executes its code
 ## Next milestones
 
 1. Markdown/math cells and a documented notebook schema migration.
-2. A persistent, cancellable kernel with restart, interrupt and explicit state semantics.
+2. Richer kernel inspection and cancellation without discarding the whole worker.
 3. gopls completion, diagnostics and navigation against exact module environments.
 4. Jupyter messaging/ipynb interoperability and rich-display contracts.
 5. Widget support and package examples validated with real research users.
@@ -53,3 +55,5 @@ Each milestone needs its own executable examples, compatibility tests and measur
 resource behavior before it is advertised as supported. General AI training and
 inference capability depends on the imported libraries and host runtimes; a
 notebook interface alone does not make Go a replacement for an entire ecosystem.
+
+Memory sessions have distinct [execution and retention rules](native-memory.md).

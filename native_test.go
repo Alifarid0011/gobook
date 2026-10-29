@@ -385,3 +385,53 @@ func TestNativeIntegrationStopDuringStartup(t *testing.T) {
 		t.Fatal("cancelled startup left build directory")
 	}
 }
+
+func TestNativeIntegrationCanonicalFilesAndCommandRevision(t *testing.T) {
+	n := Notebook{Version: 1, Imports: []string{"os"}, Cells: []Cell{{Code: `if err:=os.WriteFile("retained.csv",[]byte("x\n1\n"),0600);err!=nil{panic(err)}`}, {Code: `if err:=os.Remove("retained.csv");err!=nil{panic(err)}`}}}
+	m := nativeStartTest(t, n, Kernel{})
+	first := nativeRunTest(t, m, n, 1)
+	if !first.CommandAccepted || first.SessionID == "" || len(first.Files) != 1 || len(first.Result.Artifacts) != 1 {
+		t.Fatalf("first files: %+v", first)
+	}
+	if _, err := m.ExecuteExpected(context.Background(), n, 1, "wrong", -1); err == nil {
+		t.Fatal("negative revision bypassed CAS")
+	}
+	if rejected, err := m.ExecuteExpected(context.Background(), n, 1, first.SessionID, 0); err == nil || rejected.CommandAccepted {
+		t.Fatal("stale history command accepted")
+	}
+	if got := m.State(); len(got.History) != 1 {
+		t.Fatal("rejected stale command executed")
+	}
+	repeated, err := m.ExecuteExpected(context.Background(), n, 1, first.SessionID, 1)
+	if err != nil || len(repeated.Files) != 1 || len(repeated.Result.Artifacts) != 0 {
+		t.Fatalf("unchanged file disappeared: %+v %v", repeated, err)
+	}
+	repeated.Files[0].Data = "mutated caller"
+	if m.State().Files[0].Data == "mutated caller" {
+		t.Fatal("state aliases canonical files")
+	}
+	removed := nativeRunTest(t, m, n, 2)
+	if removed.Files == nil || len(removed.Files) != 0 {
+		t.Fatal("deleted file retained in canonical list")
+	}
+	recreated := nativeRunTest(t, m, n, 1)
+	if len(recreated.Files) != 1 || len(recreated.Result.Artifacts) != 1 {
+		t.Fatal("recreated file not reported")
+	}
+	if err := m.Stop(); err != nil {
+		t.Fatal(err)
+	}
+	next, err := m.Start(context.Background(), n)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next.SessionID == first.SessionID {
+		t.Fatal("replacement kernel reused instance id")
+	}
+	if _, err := m.ExecuteExpected(context.Background(), n, 1, "wrong", -1); err == nil {
+		t.Fatal("negative revision bypassed CAS")
+	}
+	if rejected, err := m.ExecuteExpected(context.Background(), n, 1, first.SessionID, 0); err == nil || rejected.CommandAccepted {
+		t.Fatal("old kernel command accepted")
+	}
+}

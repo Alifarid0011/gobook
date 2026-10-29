@@ -116,6 +116,8 @@ addEventListener('beforeinstallprompt', e => { e.preventDefault(); installPrompt
 $('install').onclick = async () => { if (installPrompt) { await installPrompt.prompt(); installPrompt = null; $('install').hidden = true; } };
 addEventListener('appinstalled', () => { $('install').hidden = true; notify('GoBook installed.'); });
 function markChanged() {
+ globalThis.GoBookMemory?.sourceChanged();
+ if ($('cell-graph') && !$('cell-graph').hidden) $('graph-status').textContent = 'Source changed. Refresh the graph.';
  document.querySelectorAll('.cell-output-heading').forEach(el => el.textContent = 'Previous run · source changed');
  changed = true; $('save-state').textContent = 'Unsaved changes';
  $('import-summary').textContent = $('imports').value || 'No imports';
@@ -197,6 +199,7 @@ function load(n) {
  $('cells').replaceChildren(); n.cells.forEach(c => addCell(c.code)); renumber();
  exportText(); setExperiment(); setView('both'); $('starters').open = false;
  emptyOutput('A fresh perspective.', 'This notebook is loaded. Run all when you are ready.'); setStatus('Loaded · not executed');
+ globalThis.GoBookMemory?.sourceChanged();
  $('execution-note').textContent = 'Loaded files never run automatically.'; changed = false; $('save-state').textContent = 'Loaded from file';
 }
 $('add').onclick = () => { addCell('', true); markChanged(); };
@@ -234,8 +237,8 @@ $('file').onchange = async () => {
   const value = JSON.parse(await file.text());
   if (value.format === 'gobook-experiment') {
    if (value.version !== 1) throw Error('Unsupported experiment version');
-   validateResult(value.result); load(value.notebook); renderResult(value.result); setExperiment(value);
-   setStatus('Imported results' + (value.notebook.runThrough ? ' · through cell ' + value.notebook.runThrough : '') + ' · not rerun'); $('execution-note').textContent = 'Historical results supplied by this file; not verified by this host. ' + (value.notebook.runThrough ? 'Use Run to here on cell ' + value.notebook.runThrough + ' to replay the saved prefix.' : 'Use Run all to replay the notebook.'); setView('results');
+   validateResult(value.result); load(value.notebook); renderResult(value.result); setExperiment(value); globalThis.GoBookMemory?.importedSession(value.session);
+   setStatus('Imported results' + (value.notebook.runThrough ? ' · through cell ' + value.notebook.runThrough : '') + ' · not rerun'); $('execution-note').textContent = 'Historical results supplied by this file; not verified by this host. ' + (value.notebook.runThrough ? 'Use Run to here on cell ' + value.notebook.runThrough + ' to replay the saved prefix.' : 'Use Run all to replay the notebook.'); if (value.session?.kind === 'native') $('execution-note').textContent += ' Native session: the file contains results and command history, not live RAM. Replay is available in Kernel controls.'; setView('results');
   } else { if (file.size > 262144) throw Error('Notebook exceeds 256 KiB'); load(value); }
   notify('Opened. Code has not been run.');
  }
@@ -341,6 +344,7 @@ function setBusy(value) {
  if (!value && !loadingExample && !debugging) renumber(); updateConnection(); showFiles(); $('output').setAttribute('aria-busy', String(value));
 }
 async function runNotebook(through = null) {
+ if (globalThis.GoBookMemory?.active) { await globalThis.GoBookMemory.run(through); return; }
  if (busy || debugging || loadingExample || !token) return;
  let snapshot, sourceSnapshot; try { const n = notebook(); sourceSnapshot = JSON.stringify(n); if (through !== null) n.runThrough = through; snapshot = JSON.stringify(n); if (new TextEncoder().encode(snapshot).length > 262144) throw Error('Notebook request exceeds 256 KiB. Reduce code or attached inputs.'); } catch (e) { notify(e.message); return; }
  const start = performance.now(); clearCellOutputs(); setBusy(true);

@@ -35,6 +35,7 @@ func (s *Server) debugHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.URL.Path == "/api/debug/start" {
 		s.releaseExpiredDebug(r.Context())
+		s.releaseExpiredNative()
 	}
 	s.debugMu.Lock()
 	defer s.debugMu.Unlock()
