@@ -1,0 +1,37 @@
+Machine-specific pilot; no cross-language or general performance claim.
+Captured UTC: 2026-10-29T15:17:35.845622+00:00
+Working directory: /home/ali/Desktop/Projects/gobook
+Runner sets GOMAXPROCS=2 GOFLAGS=-p=2; fixture and benchmarks are in tabular_test.go.
+
+$ bash /home/ali/Desktop/Projects/contribution-notes/querystring-go.sh /home/ali/.gvm/gos/go1.26.8/bin/go version
+go version go1.26.8 linux/amd64
+Exit status: 0
+
+$ bash /home/ali/Desktop/Projects/contribution-notes/querystring-go.sh /home/ali/.gvm/gos/go1.26.8/bin/go env GOOS GOARCH GOMAXPROCS GOFLAGS CGO_ENABLED
+linux
+amd64
+
+-p=2
+1
+Exit status: 0
+
+$ bash /home/ali/Desktop/Projects/contribution-notes/querystring-go.sh /home/ali/.gvm/gos/go1.26.8/bin/go test ./tabular -run ^$ -bench . -benchmem -count=3 -benchtime=200ms
+goos: linux
+goarch: amd64
+pkg: github.com/Alifarid0011/gobook/tabular
+cpu: 12th Gen Intel(R) Core(TM) i3-1215U
+BenchmarkFit/1000-2  	    4270	     55744 ns/op	     112 B/op	       1 allocs/op
+BenchmarkFit/1000-2  	    4280	     55292 ns/op	     112 B/op	       1 allocs/op
+BenchmarkFit/1000-2  	    4374	     54751 ns/op	     112 B/op	       1 allocs/op
+BenchmarkFit/100000-2         	      43	   5577258 ns/op	     112 B/op	       1 allocs/op
+BenchmarkFit/100000-2         	      40	   5584909 ns/op	     112 B/op	       1 allocs/op
+BenchmarkFit/100000-2         	      43	   5596400 ns/op	     112 B/op	       1 allocs/op
+BenchmarkPredict/1000-2       	    8180	     29321 ns/op	    8192 B/op	       1 allocs/op
+BenchmarkPredict/1000-2       	    8131	     51698 ns/op	    8192 B/op	       1 allocs/op
+BenchmarkPredict/1000-2       	    5736	     39978 ns/op	    8192 B/op	       1 allocs/op
+BenchmarkPredict/100000-2     	      72	   3174519 ns/op	  802816 B/op	       1 allocs/op
+BenchmarkPredict/100000-2     	      90	   2821571 ns/op	  802816 B/op	       1 allocs/op
+BenchmarkPredict/100000-2     	      92	   2804133 ns/op	  802816 B/op	       1 allocs/op
+PASS
+ok  	github.com/Alifarid0011/gobook/tabular	3.094s
+Exit status: 0

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "title": "Predict with a saved tabular model",
+  "note": "Attach model.json from the tabular training notebook in the input files control before running. Loading a model does not train it; no accuracy metrics can be computed without observed responses. Uses the versioned gobook.ols v1 JSON schema and GoBook v0.2.0.",
+  "imports": [
+    "fmt",
+    "os",
+    "github.com/Alifarid0011/gobook/tabular"
+  ],
+  "dependencies": {
+    "github.com/Alifarid0011/gobook": "v0.2.0"
+  },
+  "cells": [
+    {
+      "code": "// 1. Open the explicitly attached JSON model; the caller owns the input file.\ninput, err := os.Open(\"model.json\")\nif err != nil { panic(err) }\nmodel, err := tabular.Load(input)\ncloseErr := input.Close()\nif err != nil { panic(err) }\ndefer model.Close()\nif closeErr != nil { panic(closeErr) }"
+    },
+    {
+      "code": "// 2. Supply new predictor values in the same units as the training column.\nnewHours := []float64{7, 8, 9}\npredicted, err := model.Predict(newHours)\nif err != nil { panic(err) }\nfor i, x := range newHours { fmt.Printf(\"hours=%.2f predicted score=%.6f\\n\", x, predicted[i]) }\nfmt.Println(\"Predictions only: no observed responses were supplied for evaluation.\")"
+    },
+    {
+      "code": "// 3. Close invalidates the model; reopening requires another explicit Load.\nif err = model.Close(); err != nil { panic(err) }\nif _, err = model.Predict(newHours); err == nil { panic(\"closed model unexpectedly predicts\") }\nfmt.Println(\"Model closed.\")"
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "title": "Train and save a small tabular model",
+  "note": "Synthetic CSV teaching fixture. The first six rows train one-predictor OLS; the final three are an ordered, deterministic holdout, not a random split. Only training rows enter Fit. Metrics are calculated when run and do not establish real-world performance or causation. Requires published GoBook v0.2.0.",
+  "imports": [
+    "encoding/csv",
+    "fmt",
+    "math",
+    "os",
+    "strconv",
+    "strings",
+    "github.com/Alifarid0011/gobook/tabular"
+  ],
+  "dependencies": {
+    "github.com/Alifarid0011/gobook": "v0.2.0"
+  },
+  "cells": [
+    {
+      "code": "// 1. Strict named numeric columns; synthetic observations in explicit order.\nsource := \"hours,score\\n1,3.2\\n2,4.8\\n3,7.1\\n4,8.9\\n5,11.2\\n6,12.8\\n7,15.1\\n8,16.9\\n9,19.2\\n\"\ndata, err := tabular.ReadCSV(strings.NewReader(source), \"hours\", \"score\")\nif err != nil { panic(err) }\ntrain, heldout, err := tabular.Split(data, 6)\nif err != nil { panic(err) }\nfmt.Printf(\"Ordered split: %d training rows, %d held-out rows\\n\", len(train.X), len(heldout.X))"
+    },
+    {
+      "code": "// 2. Fit on training rows only, then predict untouched held-out X.\nmodel, err := tabular.Fit(train)\nif err != nil { panic(err) }\ndefer model.Close()\npredicted, err := model.Predict(heldout.X)\nif err != nil { panic(err) }\nmetrics, err := tabular.Evaluate(heldout.Y, predicted)\nif err != nil { panic(err) }\nfmt.Printf(\"Held-out MAE: %.6f\\nRMSE: %.6f\\nR2: %.6f\\n\", metrics.MAE, metrics.RMSE, metrics.R2)"
+    },
+    {
+      "code": "// 3. Persist the versioned model, reopen it, and verify exact round-trip parity.\nmodelFile, err := os.Create(\"model.json\")\nif err != nil { panic(err) }\nif err = model.Save(modelFile); err != nil { modelFile.Close(); panic(err) }\nif err = modelFile.Close(); err != nil { panic(err) }\nmodelInput, err := os.Open(\"model.json\")\nif err != nil { panic(err) }\nrestored, err := tabular.Load(modelInput)\ncloseErr := modelInput.Close()\nif err != nil { panic(err) }\ndefer restored.Close()\nif closeErr != nil { panic(closeErr) }\nroundtrip, err := restored.Predict(heldout.X)\nif err != nil { panic(err) }\nfor i := range predicted {\n    if math.Float64bits(predicted[i]) != math.Float64bits(roundtrip[i]) { panic(\"model round-trip changed prediction\") }\n}\noutput, err := os.Create(\"predictions.csv\")\nif err != nil { panic(err) }\nwriter := csv.NewWriter(output)\nif err = writer.Write([]string{\"hours\", \"actual_score\", \"predicted_score\"}); err != nil { output.Close(); panic(err) }\nfor i, x := range heldout.X {\n    row := []string{strconv.FormatFloat(x, 'g', -1, 64), strconv.FormatFloat(heldout.Y[i], 'g', -1, 64), strconv.FormatFloat(predicted[i], 'g', -1, 64)}\n    if err = writer.Write(row); err != nil { output.Close(); panic(err) }\n}\nwriter.Flush()\nif err = writer.Error(); err != nil { output.Close(); panic(err) }\nif err = output.Close(); err != nil { panic(err) }\nif err = model.Close(); err != nil { panic(err) }\nif err = restored.Close(); err != nil { panic(err) }\nif _, err = restored.Predict(heldout.X); err == nil { panic(\"closed model unexpectedly predicts\") }\nfmt.Println(\"Saved model.json and predictions.csv; restored predictions match; both models closed.\")"
+    }
+  ]
+}
