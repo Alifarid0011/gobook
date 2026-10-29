@@ -11,7 +11,7 @@ import (
 	"sync"
 )
 
-//go:embed ui.html
+//go:embed ui.html ui.css examples/*.gobook.json
 var ui embed.FS
 
 type Server struct {
@@ -67,6 +67,20 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/app.js" && r.Method == http.MethodGet {
 		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 		w.Write([]byte(appJS))
+		return
+	}
+	if r.Method == http.MethodGet && (r.URL.Path == "/ui.css" || strings.HasPrefix(r.URL.Path, "/examples/")) {
+		b, err := ui.ReadFile(strings.TrimPrefix(r.URL.Path, "/"))
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		mime := "application/json; charset=utf-8"
+		if r.URL.Path == "/ui.css" {
+			mime = "text/css; charset=utf-8"
+		}
+		w.Header().Set("Content-Type", mime)
+		w.Write(b)
 		return
 	}
 	if r.URL.Path != "/api/run" {

@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "title": "Inspect a distribution",
+  "note": "Twenty synthetic observations. Replace the values in cell 1 and choose a bin count. The final histogram bin includes its right edge. A histogram alone does not establish normality.",
+  "imports": [
+    "fmt",
+    "github.com/Alifarid0011/chartframe"
+  ],
+  "cells": [
+    {
+      "code": "// 1. Enter your sample and choose the number of bins.\nvalues := []float64{2, 3, 3, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 7, 7, 8, 8, 9, 10, 12}\nbins := 6"
+    },
+    {
+      "code": "// 2. Count observations and compute descriptive statistics.\ns, err := chartframe.Describe(values)\nif err != nil { panic(err) }\nfmt.Printf(\"Observations: %d\\nMean: %.2f\\nMedian: %.2f\\nRange: %.2f to %.2f\\nBins: %d\\n\", s.Count, s.Mean, s.Median, s.Min, s.Max, bins)"
+    },
+    {
+      "code": "// 3. Compare frequency and cumulative views.\nhist := chartframe.New(\"Frequency\").Labels(\"Value\", \"Count\").Histogram(\"sample\", values, bins)\ncdf := chartframe.New(\"Empirical cumulative distribution\").Labels(\"Value\", \"Proportion ≤ value\").ECDF(\"sample\", values)\nerr = chartframe.Grid(\"Distribution study\", 1, hist, cdf).Save(\"distribution-study.svg\")\nif err != nil { panic(err) }"
+    }
+  ]
+}

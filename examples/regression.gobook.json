@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "title": "Explore a linear relationship",
+  "note": "Synthetic teaching data: y = 2x + 1. Replace both slices with paired observations. Ordinary least squares is descriptive here; R² does not establish causation or validate model assumptions.",
+  "imports": [
+    "fmt",
+    "github.com/Alifarid0011/chartframe"
+  ],
+  "cells": [
+    {
+      "code": "// 1. Enter paired observations; both slices must have the same length.\nx := []float64{1, 2, 3, 4, 5}\ny := []float64{3, 5, 7, 9, 11}"
+    },
+    {
+      "code": "// 2. Fit an ordinary least-squares line.\nfit, err := chartframe.FitLinear(x, y)\nif err != nil { panic(err) }\nfmt.Printf(\"Pairs: %d\\nSlope: %.2f\\nIntercept: %.2f\\nR²: %.4f\\n\", len(x), fit.Slope, fit.Intercept, fit.RSquared)"
+    },
+    {
+      "code": "// 3. Plot the observations and fitted relationship.\nerr = chartframe.New(\"Observations and fitted line\").Labels(\"Predictor x\", \"Response y\").Scatter(\"observations\", x, y).LinearFit(\"OLS fit\", x, y).Save(\"linear-relationship.svg\")\nif err != nil { panic(err) }"
+    }
+  ]
+}
