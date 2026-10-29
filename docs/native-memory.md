@@ -1,9 +1,12 @@
 # Native memory sessions
 
+This page describes **Native** mode. For code edits without restarting, choose
+**Interactive** mode and read [editable cells](interactive-kernel.md).
+
 GoBook compiles the whole notebook into one Go main function and pauses a
 resident worker between complete-statement cells. This keeps ordinary slices,
 maps, pointers, handles and goroutines alive without interpreting Go or replaying
-previous cells. A cell Run or Run all automatically starts it. Use the **Kernel** panel to stop, restart or inspect it.
+previous cells. Select Native before starting; a cell Run or Run all then automatically starts it. Use the **Kernel** panel to stop, restart or inspect it.
 
 1. Load **Memory & goroutines** and start the memory kernel.
 2. Run cells 1 and 2. Repeat cell 2: its counter increases and the slice address

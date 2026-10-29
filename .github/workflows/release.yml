@@ -32,6 +32,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     env:
       GOBOOK_NATIVE_INTEGRATION: '1'
+      GOBOOK_GOPLS: gopls
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -40,7 +41,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --test tests/native_ui.test.cjs tests/desktop_ui.test.cjs tests/cell_output_ui.test.cjs
+      - name: Install Go language server
+        env:
+          CGO_ENABLED: '0'
+        run: go install golang.org/x/tools/gopls@v0.20.0
+      - run: node --test tests/native_ui.test.cjs tests/desktop_ui.test.cjs tests/cell_output_ui.test.cjs tests/completion_ui.test.cjs
       - name: Native tests
         run: go test -p 2 ./...
       - run: go vet ./...
@@ -52,7 +57,7 @@ jobs:
           ARCH: ${{ matrix.arch }}
         run: |
           bash packaging/test-linux.sh
-          bash packaging/build-linux.sh "$VERSION" "$ARCH"
+          GOBOOK_GOPLS_BINARY=$(command -v gopls) bash packaging/build-linux.sh "$VERSION" "$ARCH"
           cd dist
           sha256sum -c "gobook-$VERSION-linux-$ARCH.tar.gz.sha256"
           mkdir extracted
@@ -66,6 +71,7 @@ jobs:
           ARCH: ${{ matrix.arch }}
         run: |
           ./packaging/test-windows.ps1
+          $env:GOBOOK_GOPLS_BINARY = (Get-Command gopls).Source
           ./packaging/build-windows.ps1 -Version $env:VERSION -Arch $env:ARCH
           $name = "gobook-$env:VERSION-windows-$env:ARCH"
           $archive = "dist/$name.zip"

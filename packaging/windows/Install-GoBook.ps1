@@ -10,6 +10,8 @@ $InstallDir = (Get-Item $InstallDir).FullName
 $ShortcutDir = (Get-Item $ShortcutDir).FullName
 if ($InstallDir -ne $PSScriptRoot) {
     Copy-Item "$PSScriptRoot/gobook.exe" "$InstallDir/gobook.exe" -Force
+    if (Test-Path "$PSScriptRoot/gopls.exe") { Copy-Item "$PSScriptRoot/gopls.exe" "$InstallDir/gopls.exe" -Force }
+    if (Test-Path "$PSScriptRoot/THIRD_PARTY_NOTICES.txt") { Copy-Item "$PSScriptRoot/THIRD_PARTY_NOTICES.txt" "$InstallDir/THIRD_PARTY_NOTICES.txt" -Force }
     Copy-Item "$PSScriptRoot/GoBook-Local.ps1" "$InstallDir/GoBook-Local.ps1" -Force
 }
 @{ goDirectory = (Split-Path $compiler.Source -Parent) } | ConvertTo-Json | Set-Content "$InstallDir/launcher.json" -Encoding UTF8

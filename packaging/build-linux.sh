@@ -13,6 +13,11 @@ CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -trimpath -o "$stage/gobook" .
 cp packaging/linux/* "$stage/"
 cp docs/desktop.md "$stage/README.md"
 cp LICENSE "$stage/"
+install -m 644 third_party/yaegi-LICENSE.txt "$stage/THIRD_PARTY_NOTICES.txt"
+if [[ -n "${GOBOOK_GOPLS_BINARY:-}" ]]; then
+  install -m 755 "$GOBOOK_GOPLS_BINARY" "$stage/gopls"
+  "$GOBOOK_GOPLS_BINARY" licenses >> "$stage/THIRD_PARTY_NOTICES.txt"
+fi
 chmod +x "$stage/gobook" "$stage/gobook.sh" "$stage/install.sh"
 tar -C dist -czf "dist/$name.tar.gz" "$name"
 (cd dist && sha256sum "$name.tar.gz" > "$name.tar.gz.sha256")

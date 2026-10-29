@@ -12,10 +12,11 @@ import (
 	"sync"
 )
 
-//go:embed ui.html ui.css editor.js debug_ui.js graph_ui.js native_ui.js desktop_ui.js examples/*.gobook.json
+//go:embed ui.html ui.css editor.js completion_ui.js debug_ui.js graph_ui.js native_ui.js desktop_ui.js examples/*.gobook.json
 var ui embed.FS
 
 type Server struct {
+	Completion                                   *CompletionManager
 	DesktopQuit                                  func()
 	Token, Host                                  string
 	PublicOrigin                                 string
@@ -25,7 +26,6 @@ type Server struct {
 	nativeActive, nativeStarting, nativeStopping bool
 	nativeGeneration                             uint64
 	nativeCancel                                 context.CancelFunc
-	nativeNotebook                               *Notebook
 	Debugger                                     *DebugManager
 	debugMu                                      sync.Mutex
 	debugActive                                  bool
@@ -80,7 +80,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(appJS))
 		return
 	}
-	if r.Method == http.MethodGet && (r.URL.Path == "/ui.css" || r.URL.Path == "/editor.js" || r.URL.Path == "/debug_ui.js" || r.URL.Path == "/graph_ui.js" || r.URL.Path == "/native_ui.js" || r.URL.Path == "/desktop_ui.js" || strings.HasPrefix(r.URL.Path, "/examples/")) {
+	if r.Method == http.MethodGet && (r.URL.Path == "/ui.css" || r.URL.Path == "/completion_ui.js" || r.URL.Path == "/editor.js" || r.URL.Path == "/debug_ui.js" || r.URL.Path == "/graph_ui.js" || r.URL.Path == "/native_ui.js" || r.URL.Path == "/desktop_ui.js" || strings.HasPrefix(r.URL.Path, "/examples/")) {
 		b, err := ui.ReadFile(strings.TrimPrefix(r.URL.Path, "/"))
 		if err != nil {
 			http.NotFound(w, r)
@@ -90,7 +90,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/ui.css" {
 			mime = "text/css; charset=utf-8"
 		}
-		if r.URL.Path == "/editor.js" || r.URL.Path == "/debug_ui.js" || r.URL.Path == "/graph_ui.js" || r.URL.Path == "/native_ui.js" || r.URL.Path == "/desktop_ui.js" {
+		if r.URL.Path == "/completion_ui.js" || r.URL.Path == "/editor.js" || r.URL.Path == "/debug_ui.js" || r.URL.Path == "/graph_ui.js" || r.URL.Path == "/native_ui.js" || r.URL.Path == "/desktop_ui.js" {
 			mime = "text/javascript; charset=utf-8"
 		}
 		w.Header().Set("Content-Type", mime)
@@ -99,6 +99,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.HasPrefix(r.URL.Path, "/api/desktop/") {
 		s.desktopHTTP(w, r)
+		return
+	}
+	if r.URL.Path == "/api/complete" {
+		s.completionHTTP(w, r)
 		return
 	}
 	if strings.HasPrefix(r.URL.Path, "/api/native/") {

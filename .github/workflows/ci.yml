@@ -16,9 +16,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --test tests/native_ui.test.cjs tests/desktop_ui.test.cjs tests/cell_output_ui.test.cjs
+      - name: Install Go language server
+        env:
+          CGO_ENABLED: '0'
+        run: go install golang.org/x/tools/gopls@v0.20.0
+      - run: node --test tests/native_ui.test.cjs tests/desktop_ui.test.cjs tests/cell_output_ui.test.cjs tests/completion_ui.test.cjs
       - run: go test -p 2 ./...
         env:
           GOBOOK_NATIVE_INTEGRATION: '1'
+          GOBOOK_GOPLS: gopls
       - run: go vet ./...
       - run: go build ./...

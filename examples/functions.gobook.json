@@ -1,7 +1,7 @@
 {
   "version": 1,
   "title": "Shared data, functions and return values",
-  "note": "Run cell 1 once, then cell 2 twice. Run cell 3 and repeat cell 2: the closure and slice remain in native RAM. Cell runs do not replay earlier cells. Source changes require an explicit restart.",
+  "note": "Run cell 1 once, then cell 2 twice. Run cell 3 and repeat cell 2: the closure and slice remain in native RAM. Cell runs do not replay earlier cells. Interactive mode permits code edits without restart; Native mode requires an explicit restart.",
   "imports": [
     "fmt"
   ],

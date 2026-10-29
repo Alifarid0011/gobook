@@ -160,6 +160,7 @@ function addCell(code = '', focus = false) {
  wrap.append(lines, editor); section.append(head, wrap, foot, output); $('cells').append(section); updateLines(); renumber();
  editor.style.tabSize = preferences.indent; editor.wrap = preferences.wrap ? 'soft' : 'off';
  editorViews.set(editor, GoBookEditor.attach(wrap, editor));
+ GoBookCompletion.attach(wrap,editor,()=>({notebook:notebook(),cell:[...$('cells').children].indexOf(section)+1,token}));
  editor.style.height = Math.min(420, Math.max(128, (code.split('\n').length + 2) * 20)) + 'px';
  if (focus) { editor.focus(); section.scrollIntoView({ block: 'nearest' }); }
 }
@@ -199,7 +200,7 @@ function load(n) {
  $('cells').replaceChildren(); n.cells.forEach(c => addCell(c.code)); renumber();
  exportText(); setExperiment(); setView('both'); $('starters').open = false;
  emptyOutput('A fresh perspective.', 'This notebook is loaded. Run all when you are ready.'); setStatus('Loaded · not executed');
- globalThis.GoBookMemory?.sourceChanged();
+ globalThis.GoBookMemory?.loadedNotebook(n);globalThis.GoBookMemory?.sourceChanged();
  $('execution-note').textContent = 'Loaded files never run automatically.'; changed = false; $('save-state').textContent = 'Loaded from file';
 }
 $('add').onclick = () => { addCell('', true); markChanged(); };
@@ -238,7 +239,7 @@ $('file').onchange = async () => {
   if (value.format === 'gobook-experiment') {
    if (value.version !== 1) throw Error('Unsupported experiment version');
    validateResult(value.result); load(value.notebook); renderResult(value.result); setExperiment(value); globalThis.GoBookMemory?.importedSession(value.session);
-   setStatus('Imported results' + (value.notebook.runThrough ? ' · through cell ' + value.notebook.runThrough : '') + ' · not rerun'); $('execution-note').textContent = 'Historical results supplied by this file; not verified by this host. ' + (value.notebook.runThrough ? 'Run cells 1 through ' + value.notebook.runThrough + ' explicitly in order to replay the saved prefix.' : 'Use Run all to replay the notebook.'); if (value.session?.kind === 'native') $('execution-note').textContent += ' Native session: the file contains results and command history, not live RAM. Replay is available in Kernel controls.'; setView('results');
+   setStatus('Imported results' + (value.notebook.runThrough ? ' · through cell ' + value.notebook.runThrough : '') + ' · not rerun'); $('execution-note').textContent = 'Historical results supplied by this file; not verified by this host. ' + (value.notebook.runThrough ? 'Run cells 1 through ' + value.notebook.runThrough + ' explicitly in order to replay the saved prefix.' : 'Use Run all to replay the notebook.'); if (value.session?.kind === 'native' || value.session?.kind === 'interactive') $('execution-note').textContent += ' Native session: the file contains results and command history, not live RAM. Replay is available in Kernel controls.'; setView('results');
   } else { if (file.size > 262144) throw Error('Notebook exceeds 256 KiB'); load(value); }
   notify('Opened. Code has not been run.');
  }

@@ -1,10 +1,10 @@
 # GoBook
 
-A small computational notebook for Go. Write editable cells in your browser, run them with the real Go compiler, and keep notes, output, and chart images together. The server and UI use the Go standard library; there is no Python runtime, CDN, telemetry, or AI service.
+A small computational notebook for Go. Write Go cells in your browser, edit and run them in a retained interactive session, or choose the native Go compiler for versioned libraries. Keep notes, output, tables and charts beside the code. The interactive worker uses pinned Yaegi; no Python runtime or external UI assets are required.
 
 Built by [Ali Farid](https://github.com/Alifarid0011).
 
-**Status: early research tool.** GoBook currently computes Go code. NotebookLM-style document sources, retrieval, and AI Q&A are future work and are not implemented.
+**Status: early release.** GoBook currently computes Go code. NotebookLM-style document sources, retrieval, and AI Q&A are future work and are not implemented.
 
 ![GoBook workspace with a chart computed from Go cells](docs/workspace.jpg)
 
@@ -25,11 +25,11 @@ absent host. Use the installed **GoBook Local** menu entry for automatic startup
 Install Go 1.25 or newer:
 
 ```sh
-go install github.com/Alifarid0011/gobook@v0.7.0
+go install github.com/Alifarid0011/gobook@v0.8.0
 gobook
 ```
 
-If your Go binary directory is not on PATH, use `go run github.com/Alifarid0011/gobook@v0.7.0` instead.
+If your Go binary directory is not on PATH, use `go run github.com/Alifarid0011/gobook@v0.8.0` instead.
 
 Or run from a source checkout:
 
@@ -79,15 +79,27 @@ The tables, model, predictions and diagnostic charts can all be inspected or sav
 4. Write Go statements in cells, then choose **Run all**.
 5. Save JSON in your browser; **Open JSON** loads a notebook without running it.
 
-Use Ctrl/Cmd+Enter to run all cells, or Shift+Enter inside a cell to run through it. Tab indents code; Shift+Tab moves keyboard
+Use Ctrl/Cmd+Enter to run all cells, or Shift+Enter inside a cell to run only that cell. Tab indents code; Shift+Tab moves keyboard
 focus out of the editor. Cell arrows reorder execution. Editing during a run
 keeps its output tied to the earlier source snapshot.
 
-All code cells are concatenated inside one `func main()`. Variables declared in an earlier cell are available below it. Imports belong in the explicit imports field; top-level function/type declarations can be written as local function values/types where Go permits. Standard Go compile rules apply, including unused imports. Build errors identify `cell1.go`, `cell2.go`, and so on.
+**Interactive** mode retains variables, functions and return values across cell edits.
+Run the selected cell without rerunning earlier cells; required names must already
+exist in the session. Syntax/evaluation errors leave the worker available, with
+no rollback of statements already executed. The first version supports bundled
+standard-library packages; choose **Kernel → Engine → Native** for versioned
+third-party Go modules. Stop before switching engines.
 
-**Run cell** and Shift+Enter automatically start a native memory kernel and execute only the selected cell. Earlier cells are never replayed automatically. Run prerequisite cells explicitly first; **Run all** explicitly executes all cells in order in the resident worker. Values and function values stay in RAM until Stop, restart, timeout or process exit. Editing execution inputs still requires an explicit restart.
+**Native** mode compiles the whole notebook into one function and retains normal
+Go RAM between commands. Source edits require Restart, cells need complete
+statements, and only reached cells or the next cell can execute. The explicit
+fresh-process action preserves the older concatenated full-run workflow.
+[Engine behavior, examples and limits](docs/interactive-kernel.md).
 
-The whole notebook is compiled once at startup, so syntax/type errors in later cells can block startup. Native cells require complete statements without `goto`. **Kernel → Run all in a fresh process**, available after stopping a live memory kernel, retains the legacy concatenated execution path for cross-cell blocks. This is not a full Jupyter REPL: arbitrary source redefinition, cell reordering and arbitrary execution beyond the native frontier are not implemented.
+Type `fmt.Pr` or press **Ctrl+Space** for Go completion. Portable packages include
+**gopls**, which offers typed source-based suggestions. Local standard-library,
+keyword and notebook-identifier suggestions remain available without it. Up/Down
+selects; Enter/Tab inserts; Escape dismisses. [Setup and current scope](docs/completion.md).
 
 Use **Notebook / Code / Results** to show inline outputs, code only, or aggregate results. On small screens the notebook keeps output beside its source. Figure expansion supports keyboard dismissal. Results and figures can be downloaded individually.
 

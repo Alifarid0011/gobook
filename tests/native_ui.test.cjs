@@ -65,3 +65,33 @@ test('selected cell starts memory kernel automatically without executing other c
  h.context.fetch=async(path,options)=>{sent.push({path,body:JSON.parse(options.body)});return {ok:true,text:async()=>JSON.stringify(path.endsWith('/start')?{...snapshot(),nextCell:1}:{...snapshot([1]),nextCell:1,commandAccepted:true,result:result(1)})}};
  assert.equal(await h.check.run(1),true);assert.deepEqual(sent.map(r=>r.path),['/api/native/start','/api/native/execute']);assert.equal(sent[1].body.cell,1);
 });
+
+test('interactive cell edits send current source without resetting session or rerunning other cells',async()=>{
+ const h=controller(),n=h.notebook();h.check.set(n,{...snapshot([1]),engine:'interactive'});
+ h.current({...n,cells:[{code:'fmt.Println(2)'}]});h.check.controls();assert.equal(h.runCell.disabled,false);
+ let sent;h.context.fetch=async(path,options)=>{sent=JSON.parse(options.body);return {ok:true,text:async()=>JSON.stringify({...snapshot([1,1]),engine:'interactive',commandAccepted:true,result:result(1)})}};
+ await h.check.run(1);assert.equal(sent.notebook.cells[0].code,'fmt.Println(2)');assert.equal(sent.sessionId,'one');assert.equal(sent.historyLength,1);
+});
+test('interactive rerun preserves later cell output instead of applying native frontier invalidation',()=>{
+ const h=controller();h.check.set(h.notebook(),{...snapshot([1,2]),engine:'interactive'});h.check.showResult(result(2),2);h.check.showResult(result(1),1);
+ assert.deepEqual(Array.from(h.check.cache.keys()).sort(),[1,2]);
+});
+
+test('edited-during-run interactive output is historical, never inline under changed code',async()=>{
+ const h=controller(),n=h.notebook();h.check.set(n,{...snapshot([1]),engine:'interactive'});
+ h.context.fetch=async()=>{h.current({...n,cells:[{code:'new source'}]});return {ok:true,text:async()=>JSON.stringify({...snapshot([1,1]),engine:'interactive',commandAccepted:true,result:result(1)})}};
+ await h.check.run(1);assert.equal(h.renders.at(-1).cells.length,0);
+});
+test('saved native replay selects native and edited interactive history is not offered for replay',()=>{
+ const h=controller();h.context.GoBookMemory.importedSession({kind:'native',history:[1]});assert.equal(h.$('memory-engine').value,'native');
+ h.context.GoBookMemory.importedSession({kind:'interactive',history:[1,1]});assert.equal(h.$('memory-replay').hidden,true);assert.equal(h.$('memory-engine').value,'interactive');
+});
+test('invalid in-progress configuration text cannot break live editor change handling',()=>{
+ const h=controller();h.check.set(h.notebook(),{...snapshot(),engine:'interactive'});h.context.notebook=()=>{throw Error('incomplete config')};assert.doesNotThrow(()=>h.context.GoBookMemory.sourceChanged());
+});
+
+test('module examples select native only before a kernel starts',()=>{
+ const h=controller(),n=h.notebook();h.context.GoBookMemory.loadedNotebook({...n,imports:['github.com/Alifarid0011/sheetframe']});assert.equal(h.$('memory-engine').value,'native');
+ h.context.GoBookMemory.loadedNotebook(n);assert.equal(h.$('memory-engine').value,'interactive');
+ h.check.set(n,{...snapshot(),engine:'interactive'});h.context.GoBookMemory.loadedNotebook({...n,imports:['github.com/Alifarid0011/sheetframe']});assert.equal(h.$('memory-engine').value,'interactive');
+});

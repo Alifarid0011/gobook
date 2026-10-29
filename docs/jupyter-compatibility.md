@@ -6,19 +6,19 @@ not a claim of compatibility with a particular Jupyter release.
 
 | Capability | Current behavior |
 | --- | --- |
-| Code cells and shared variables | One compiled Go main function; cells share lexical scope |
+| Code cells and shared variables | Editable retained interpreter, or compiled Go main function in Native mode |
 | Output under each cell | Text, stderr, supported figures/tables/files; one run, no repeated side effects |
-| Run cell | Auto-starts resident kernel, sends exactly one command; unavailable prerequisites are reported without replay |
+| Run cell | Auto-starts resident kernel, sends exactly one command; missing names/prerequisites are reported without replay |
 | Run all | Explicit sequential execution in resident memory; legacy fresh process available in Kernel controls |
 | Interactive debugger | Real Delve, gutter breakpoint selection, source line, local values, stack, stepping and pause |
 | DataFrames and plots | Versioned Go modules, sheetframe example, chartframe figures |
 | Dependency provenance | Exact direct module versions, recorded go.mod/go.sum and compiler metadata |
 | Save and reopen experiments | GoBook JSON bundles; imported results are explicitly unverified |
-| Persistent kernel | Default auto-started compiled Go worker; repeat cells with native RAM, explicit restart after source edits |
+| Persistent kernel | Interactive mode retains values through code edits; Native mode requires restart after source edits |
 | Cell graph | Conservative lexical dependencies; no automatic parallel cell scheduler |
 | Desktop packages | Linux/Windows portable hosts and browser workspace; local Go required |
 | Markdown/math cells | Not implemented |
-| Go language server completion | Not implemented; current highlighting is lexical |
+| Go language server completion | Bundled gopls with typed source-based suggestions; local lexical/stdlib fallback |
 | Jupyter kernel protocol and ipynb | Not implemented |
 | Interactive widget protocol | Not implemented |
 | Notebook extensions | Ordinary Go modules are supported; no Jupyter or browser plugin API |
@@ -48,7 +48,7 @@ without attaching it to modified cells. Opening a bundle never executes its code
 
 1. Markdown/math cells and a documented notebook schema migration.
 2. Richer kernel inspection and cancellation without discarding the whole worker.
-3. gopls completion, diagnostics and navigation against exact module environments.
+3. Extend gopls integration with diagnostics and navigation, and improve interpreter source modeling.
 4. Jupyter messaging/ipynb interoperability and rich-display contracts.
 5. Widget support and package examples validated with real research users.
 

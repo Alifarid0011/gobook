@@ -20,6 +20,15 @@ import (
 )
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "-interactive-worker" {
+		if err := interactiveWorker(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	gopls := flag.String("gopls", "", "optional Go language server path for semantic completion")
 	addr := flag.String("addr", "127.0.0.1:8080", "IPv4 loopback address; port 0 picks a free port")
 	chart := flag.String("chartframe", "", "local chartframe module (defaults to adjacent ../chartframe)")
 	external := flag.String("public-origin", "", "optional HTTPS reverse proxy origin, for example https://book.example")
@@ -108,6 +117,8 @@ func main() {
 		}
 	}
 	s := &Server{Token: hex.EncodeToString(token), Host: listener.Addr().String(), Kernel: Kernel{Chartframe: *chart}, PublicOrigin: origin}
+	s.Completion = &CompletionManager{Path: *gopls, Kernel: s.Kernel}
+	defer s.Completion.Close()
 	s.Native = &NativeManager{Kernel: s.Kernel}
 	defer s.Native.Stop()
 	s.Debugger = &DebugManager{Kernel: s.Kernel, Delve: *delve}

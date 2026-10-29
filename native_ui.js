@@ -3,28 +3,31 @@
  const panel=$('memory-panel');
  let state=null, source=null, initialNotebook=null, pending=false, stopping=false, foreign=false, cache=new Map(), replayHistory=null, fileStore=new Map(), instance=null, observedHistory=[], runningCell=null;
  const key=n=>JSON.stringify({version:n.version,imports:n.imports,cells:n.cells,dependencies:Object.fromEntries(Object.entries(n.dependencies||{}).sort(([a],[b])=>a.localeCompare(b))),files:n.files||[]});
- const stale=()=>{try{return source!==key(notebook())}catch{return true}};
+ const live=()=>state?.engine==='interactive';
+ const configurationKey=n=>key({...n,cells:[],imports:[]});
+ const stale=()=>{try{return live()&&source!==null?configurationKey(JSON.parse(source))!==configurationKey(notebook()):source!==key(notebook())}catch{return true}};
  async function request(action,body) {
   const response=await fetch('/api/native/'+action,{method:body===undefined?'GET':'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
   const text=await response.text();let value;try{value=JSON.parse(text)}catch{value={error:text}}
   if(!response.ok)throw Error(value.error||text||'Memory kernel request failed');return value;
  }
  function controls() {
-  const active=Boolean(state?.active), changed=active&&(foreign||stale());
+  const active=Boolean(state?.active), changed=active&&(foreign||stale()), interactive=active?live():$('memory-engine').value==='interactive';
+  $('memory-engine').disabled=active||pending||busy||debugging;if(active)$('memory-engine').value=state.engine||'native';
   Array.from($('cells').children).forEach((el,i)=>el.setAttribute('aria-busy',String(pending&&runningCell===i+1)));
   $('memory-start').disabled=pending||active||debugging||busy||!token;
   $('memory-stop').disabled=!active&&!pending;$('memory-restart').disabled=pending||busy||debugging||!token;
   $('memory-refresh').disabled=pending||!token;$('memory-restore').hidden=!foreign||!state?.notebook;
   $('memory-replay').hidden=!replayHistory?.length;$('memory-replay').disabled=pending||active||!token;
-  $('memory-state').textContent=pending?(stopping?'Stopping kernel…':'Compiling or executing native Go…'):active?(changed?'Source changed · restart required':state.ready?'Paused · native values retained in RAM':'Kernel is running'):'No live memory kernel';
+  $('memory-state').textContent=pending?(stopping?'Stopping kernel…':(live()?'Evaluating Go in the interactive worker…':'Compiling or executing native Go…')):active?(changed?'Source changed · restart required':state.ready?(live()?'Interactive · edits retain values in RAM':'Paused · native values retained in RAM'):'Kernel is running'):'No live memory kernel';
   $('memory-stats').textContent=active?'Go heap at last stop: '+(state.heapAlloc/1048576).toFixed(2)+' MiB · '+state.goroutines+' goroutines · last cell '+state.currentCell:'Stopping or restarting discards live values. Export data and models before doing so.';
   $('memory-identity').textContent=state?.fingerprint?'Source '+state.fingerprint.slice(0,12)+' · '+(state.history?.length||0)+' executed commands':'';
   const cannotRun=busy||pending||debugging||loadingExample||!token||(active&&changed);
   $('run').disabled=cannotRun;document.querySelectorAll('.run-cell').forEach(button=>button.disabled=cannotRun);
-  document.querySelectorAll('.run-cell').forEach((button,i)=>{button.textContent=pending&&runningCell===i+1?'Running…':'▶ Run cell';button.title='Run only this cell in native memory; earlier cells are never replayed automatically'});
-  document.querySelector('.intro-bottom > span').textContent=active?'● Native memory session · values retained':'○ Kernel idle · Run cell keeps values';
-  document.querySelectorAll('.cell-foot').forEach(el=>el.textContent=active?'Shift Enter · native values stay in RAM; later cells are invalidated':'Shift Enter · run only this cell; native values stay in RAM');
-  if(active) $('kernel-label').textContent=changed?'Memory kernel · restart required':'Native memory kernel';
+  document.querySelectorAll('.run-cell').forEach((button,i)=>{button.textContent=pending&&runningCell===i+1?'Running…':'▶ Run cell';button.title=interactive?'Run only this cell; code edits retain interactive values':'Run only this cell in native memory; earlier cells are never replayed automatically'});
+  document.querySelector('.intro-bottom > span').textContent=active?(live()?'● Interactive kernel · edits retain memory':'● Native memory session · values retained'):interactive?'○ Interactive kernel · code edits retain memory':'○ Native kernel · source edits need Restart';
+  document.querySelectorAll('.cell-foot').forEach(el=>el.textContent=active?(live()?'Shift Enter · run this cell; edits keep live values':'Shift Enter · native values stay in RAM; later cells are invalidated'):interactive?'Shift Enter · run this cell; code edits retain values':'Shift Enter · run only this cell; native values stay in RAM');
+  if(active) $('kernel-label').textContent=changed?'Memory kernel · restart required':live()?'Interactive Go kernel':'Native memory kernel';
   $('debug-start').disabled=active||pending||!token||busy||loadingExample;
   $('memory-fresh').disabled=active||pending||busy||debugging||loadingExample||!token;
  }
@@ -50,7 +53,7 @@
  function mergedResult(last) {
   let textBudget=1048576,remainingCells=cache.size;const cells=[];
   for(const [number,item] of [...cache].sort(([a],[b])=>b-a)) {
-   const available=Math.max(0,textBudget-(--remainingCells)*100),c={cell:number,stdout:item.stdout,stderr:item.stderr,artifacts:[]};
+   const available=Math.max(0,textBudget-(--remainingCells)*100),c={cell:number,stdout:item.stdout,stderr:item.stderr,artifacts:[],code:item.code};
    if(c.stdout.length+c.stderr.length>available){c.stdout='Earlier output omitted from the display budget. Run this cell again to refresh it.';c.stderr=''}
    textBudget=Math.max(0,textBudget-c.stdout.length-c.stderr.length);
    for(const item of fileStore.values())if(item.owner===number)c.artifacts.push(item.artifact);
@@ -61,19 +64,19 @@
  }
  function showResult(result,cell) {
   if(!result)return;
-  for(const number of cache.keys())if(number>cell)cache.delete(number);
+  if(!live())for(const number of cache.keys())if(number>cell)cache.delete(number);
   syncFiles(state.files,result.artifacts||[],cell);
-  for(const item of result.cells||[])cache.set(item.cell,structuredClone(item));
-  const combined=mergedResult(result),matches=!foreign&&!stale();renderResult(combined,matches,true,cell);
-  if(initialNotebook) setExperiment({format:'gobook-experiment',version:1,notebook:initialNotebook,result:combined,session:{kind:'native',id:state.sessionId,fingerprint:state.fingerprint,history:[...(state.history||[])]}});
-  $('execution-note').textContent='Native memory session · outputs reflect recorded execution order. Retained files may predate the latest cell. Saved bundles do not contain live RAM.';
+  for(const item of result.cells||[])cache.set(item.cell,{...structuredClone(item),code:initialNotebook?.cells[item.cell-1]?.code});
+  const combined=mergedResult(result),matches=!foreign&&!stale();renderResult(live()?{...combined,cells:combined.cells.filter(c=>c.code===notebook().cells[c.cell-1]?.code)}:combined,matches,true,cell);
+  if(initialNotebook) setExperiment({format:'gobook-experiment',version:1,notebook:initialNotebook,result:combined,session:{kind:live()?'interactive':'native',id:state.sessionId,fingerprint:state.fingerprint,history:[...(state.history||[])]}});
+  $('execution-note').textContent=(live()?'Interactive session':'Native memory session')+' · outputs reflect recorded execution order. Retained files may predate the latest cell. Saved bundles do not contain live RAM.';
  }
  async function start() {
   if(pending||state?.active||debugging||busy||!token)return false;
   let n;try{n=relevantCurrent()}catch(error){notify(error.message);return false}
   pending=true;stopping=false;setBusy(true);controls();$('memory-error').textContent='';
   try{
-   const value=await request('start',{notebook:n});update(value,true);
+   const value=await request('start',{notebook:n,engine:$('memory-engine').value||'native'});update(value,true);
    if(value.error||!value.active){if(value.result)renderResult(value.result);throw Error(value.error||'Kernel did not start')}
    source=key(n);initialNotebook=structuredClone(n);foreign=false;cache.clear();fileStore.clear();syncFiles(value.files);clearCellOutputs();if(value.result&&(value.result.stdout||value.result.stderr||value.result.artifacts?.length))renderResult(value.result,false);
    setStatus('Memory kernel ready · nothing executed');return true;
@@ -91,7 +94,8 @@
   if(pending||busy||debugging||loadingExample||!token)return false;
   if(!state?.active&&!await start())return false;
   if(foreign||stale()){open();notify('Restore the kernel notebook or restart after your source changes.');return}
-  const target=through===null?initialNotebook.cells.length:through;
+  const executionNotebook=live()?relevantCurrent():initialNotebook;
+  const target=through===null?executionNotebook.cells.length:through;
   const queue=through===null?Array.from({length:target},(_,i)=>i+1):[target];
   pending=true;stopping=false;setBusy(true);controls();$('memory-error').textContent='';let success=false;
   try {
@@ -100,8 +104,8 @@
     if(stale())throw Error('Source changed during execution. Restart is required before the next cell.');
     runningCell=cell;controls();setStatus('Memory kernel · executing cell '+cell);
     const previousCount=state.history?.length||0,previousID=state.sessionId;
-    const value=await request('execute',{notebook:initialNotebook,cell,sessionId:previousID,historyLength:previousCount});
-    const accepted=value.commandAccepted===true&&value.sessionId===previousID&&(value.history?.length||0)===previousCount+1;update(value,accepted);
+    const value=await request('execute',{notebook:executionNotebook,cell,sessionId:previousID,historyLength:previousCount});
+    const accepted=value.commandAccepted===true&&value.sessionId===previousID&&(value.history?.length||0)===previousCount+1;if(accepted&&live()){initialNotebook=structuredClone(executionNotebook);source=key(executionNotebook)}update(value,accepted);
     if(accepted)showResult(value.result,cell);else if(!value.active&&value.result&&source&&!foreign)showResult(value.result,value.currentCell);
     if(value.error||!value.active)throw Error(value.error||'The memory kernel ended');
    }
@@ -116,12 +120,25 @@
   try {const value=await request('state');if(value.active&&source===null){foreign=true;open()}update(value);if(value.error){$('memory-error').textContent=value.error;if(source&&!foreign&&value.result)showResult(value.result,value.currentCell)}}catch(error){$('memory-error').textContent=error.message}
  }
  $('memory-toggle').onclick=()=>{panel.hidden=!panel.hidden;$('memory-toggle').setAttribute('aria-expanded',String(!panel.hidden));if(!panel.hidden){setView('both');recover();controls()}};
+ $('memory-engine').onchange=controls;
  $('memory-fresh').onclick=()=>runFreshNotebook();
  $('memory-start').onclick=start;$('memory-stop').onclick=stop;$('memory-refresh').onclick=recover;
  $('memory-restart').onclick=async()=>{if(pending)return;if(state?.active&&!confirm('Restart the memory kernel? Live values, handles and goroutines will be discarded. Export data or models first.'))return;if(state?.active&&!await stop())return;await start()};
  $('memory-restore').onclick=()=>{if(!state?.notebook)return;if(changed&&!confirm('Replace this page with the kernel source? Save your current edits first.'))return;initialNotebook=structuredClone(state.notebook);source=key(initialNotebook);foreign=false;cache.clear();fileStore.clear();syncFiles(state.files);load(initialNotebook);controls();notify('Kernel source restored. Live values remain in the resident process.')};
  $('memory-replay').onclick=async()=>{const history=[...replayHistory];if(!await start())return;for(const cell of history){if(!state?.active||stopping)break;if(!await run(cell))break}};
  $('applytoken').addEventListener('click',recover);
- globalThis.GoBookMemory={get active(){return Boolean(state?.active)},run,sourceChanged:()=>controls(),importedSession:session=>{replayHistory=session?.kind==='native'&&Array.isArray(session.history)&&session.history.length<=1000&&session.history.every(i=>Number.isInteger(i)&&i>0&&i<=$('cells').children.length)?[...session.history]:null;controls()}};
+ globalThis.GoBookMemory={get active(){return Boolean(state?.active)},run,sourceChanged:()=>{
+  try {
+   if(live()) {
+    const n=notebook();
+    for(const [cell,item]of cache) if(item.code!==n.cells[cell-1]?.code) {
+     cache.delete(cell);
+     const output=$('cells').children[cell-1]?.querySelector('.cell-output');
+     if(output){output.replaceChildren();output.hidden=true}
+    }
+   }
+  } catch {} // Invalid in-progress dependency text must not break the editor.
+  controls();
+ },loadedNotebook:n=>{if(!state?.active){$('memory-engine').value=Object.keys(n.dependencies||{}).length||n.imports.some(p=>p.split('/')[0].includes('.'))?'native':'interactive';controls()}},importedSession:session=>{if(session?.kind==='interactive'){replayHistory=null;if(!state?.active)$('memory-engine').value='interactive';notify('Interactive history records cell numbers, not every edited revision. Run cells explicitly to reproduce the saved source.');controls();return}if(session?.kind==='native'&&!state?.active)$('memory-engine').value='native';replayHistory=session?.kind==='native'&&Array.isArray(session.history)&&session.history.length<=1000&&session.history.every(i=>Number.isInteger(i)&&i>0&&i<=$('cells').children.length)?[...session.history]:null;controls()}};
  recover();
 })();

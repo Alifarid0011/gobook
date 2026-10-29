@@ -1,7 +1,7 @@
 {
   "version": 1,
   "title": "Native memory and a Go worker pool",
-  "note": "Start the memory kernel, then run cells 1 and 2. Run cell 3 and rerun cell 2: the data stays in RAM and the run counter increases. Source edits require Restart.",
+  "note": "Choose Native in Kernel controls and start it, then run cells 1 and 2. Run cell 3 and rerun cell 2: the data stays in RAM and the run counter increases. Source edits require Restart.",
   "imports": [
     "fmt",
     "math",

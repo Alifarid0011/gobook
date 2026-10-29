@@ -21,14 +21,8 @@ func (s *Server) releaseExpiredNative() {
 }
 
 func (s *Server) writeNative(w http.ResponseWriter, snapshot NativeSnapshot) {
-	s.nativeMu.Lock()
-	notebook := s.nativeNotebook
-	s.nativeMu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(struct {
-		NativeSnapshot
-		Notebook *Notebook `json:"notebook,omitempty"`
-	}{snapshot, notebook})
+	_ = json.NewEncoder(w).Encode(snapshot)
 }
 
 func (s *Server) nativeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -63,6 +57,7 @@ func (s *Server) nativeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	var request struct {
 		Notebook      Notebook `json:"notebook"`
+		Engine        string   `json:"engine"`
 		Cell          int      `json:"cell"`
 		SessionID     string   `json:"sessionId"`
 		HistoryLength *int     `json:"historyLength"`
@@ -147,10 +142,13 @@ func (s *Server) nativeHTTP(w http.ResponseWriter, r *http.Request) {
 		generation := s.nativeGeneration
 		ctx, cancel := context.WithCancel(r.Context())
 		s.nativeCancel = cancel
-		s.nativeNotebook = &request.Notebook
 		s.mu.Unlock()
 		s.nativeMu.Unlock()
-		snapshot, err := s.Native.Start(ctx, request.Notebook)
+		engine := request.Engine
+		if engine == "" {
+			engine = "native"
+		}
+		snapshot, err := s.Native.StartEngine(ctx, request.Notebook, engine)
 		cancel()
 		s.nativeMu.Lock()
 		if s.nativeGeneration == generation {

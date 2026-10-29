@@ -15,6 +15,12 @@ if ($LASTEXITCODE -ne 0) { throw 'GoBook build failed' }
 Copy-Item packaging/windows/* $stage
 Copy-Item docs/desktop.md "$stage/README.md"
 Copy-Item LICENSE $stage
+Copy-Item third_party/yaegi-LICENSE.txt "$stage/THIRD_PARTY_NOTICES.txt"
+if ($env:GOBOOK_GOPLS_BINARY) {
+    Copy-Item $env:GOBOOK_GOPLS_BINARY "$stage/gopls.exe"
+    & $env:GOBOOK_GOPLS_BINARY licenses | Add-Content "$stage/THIRD_PARTY_NOTICES.txt"
+    if ($LASTEXITCODE -ne 0) { throw 'gopls license export failed' }
+}
 $archive = "dist/$name.zip"
 Compress-Archive -Path $stage -DestinationPath $archive -Force
 $hash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()

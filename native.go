@@ -25,6 +25,8 @@ import (
 const nativeHistoryLimit = 1000
 
 type NativeSnapshot struct {
+	Notebook *Notebook `json:"notebook,omitempty"`
+	Engine   string    `json:"engine,omitempty"`
 	// CommandAccepted describes only the execute response, never stored state.
 	CommandAccepted bool       `json:"commandAccepted,omitempty"`
 	SessionID       string     `json:"sessionId"`
@@ -42,16 +44,19 @@ type NativeSnapshot struct {
 }
 
 type NativeManager struct {
-	Kernel    Kernel
-	operation sync.Mutex
-	mu        sync.Mutex
-	session   *nativeSession
+	Kernel        Kernel
+	WorkerCommand []string // Optional worker executable override for process integration tests.
+	operation     sync.Mutex
+	mu            sync.Mutex
+	session       *nativeSession
 }
 
 type nativeSession struct {
 	mu             sync.Mutex
 	snapshot       NativeSnapshot
 	dir, marker    string
+	interactive    bool
+	configuration  string
 	output         *capture
 	boundaries     [2]int
 	changed        chan struct{}
@@ -70,6 +75,7 @@ type nativeSession struct {
 }
 
 type nativeEvent struct {
+	Error      string `json:"error,omitempty"`
 	Cell       int    `json:"cell"`
 	Sequence   int    `json:"sequence"`
 	HeapAlloc  uint64 `json:"heapAlloc"`
@@ -236,6 +242,9 @@ func (s *nativeSession) view() NativeSnapshot {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	snap := s.snapshot
+	if snap.Notebook != nil {
+		snap.Notebook = copyNotebook(*snap.Notebook)
+	}
 	snap.History = append([]int{}, snap.History...)
 	if snap.Files != nil {
 		snap.Files = append([]Artifact{}, snap.Files...)
@@ -249,7 +258,25 @@ func (s *nativeSession) view() NativeSnapshot {
 	}
 	return snap
 }
-func (m *NativeManager) Start(ctx context.Context, n Notebook) (snap NativeSnapshot, err error) {
+func (m *NativeManager) Start(ctx context.Context, n Notebook) (NativeSnapshot, error) {
+	return m.StartEngine(ctx, n, "native")
+}
+func (m *NativeManager) StartEngine(ctx context.Context, n Notebook, engine string) (snap NativeSnapshot, err error) {
+	if engine != "native" && engine != "interactive" {
+		return snap, errors.New("unknown kernel engine")
+	}
+	if engine == "interactive" {
+		if n.Version != 1 || len(n.Cells) < 1 || len(n.Cells) > 1000 {
+			return snap, errors.New("interactive sessions require version 1 and 1..1000 cells")
+		}
+		if len(n.Dependencies) > 0 {
+			return snap, errors.New("interactive kernel does not support module pins; select the native kernel")
+		}
+		if err = supportedInteractiveImports(n.Imports); err != nil {
+			return snap, err
+		}
+	}
+
 	if !m.operation.TryLock() {
 		return m.State(), errors.New("native session is busy")
 	}
@@ -266,7 +293,14 @@ func (m *NativeManager) Start(ctx context.Context, n Notebook) (snap NativeSnaps
 		}
 	}
 	n.RunThrough = nil
-	src, helper, marker, err := nativeSource(n)
+	var src, helper, marker string
+	if engine == "native" {
+		src, helper, marker, err = nativeSource(n)
+	} else {
+		nonce := make([]byte, 16)
+		_, err = rand.Read(nonce)
+		marker = "\x1egobookInteractive" + hex.EncodeToString(nonce) + ":"
+	}
 	if err != nil {
 		return snap, err
 	}
@@ -279,6 +313,8 @@ func (m *NativeManager) Start(ctx context.Context, n Notebook) (snap NativeSnaps
 		return snap, err
 	}
 	s := newNativeSession(dir, marker)
+	s.interactive = engine == "interactive"
+	s.configuration = interactiveConfiguration(n)
 	s.prepared = make(chan struct{})
 	var preparedOnce sync.Once
 	preparationDone := func() { preparedOnce.Do(func() { close(s.prepared) }) }
@@ -286,7 +322,7 @@ func (m *NativeManager) Start(ctx context.Context, n Notebook) (snap NativeSnaps
 	life, cancel := context.WithCancel(context.Background())
 	s.cancel = cancel
 	id := sha256.Sum256([]byte(marker))
-	s.snapshot = NativeSnapshot{SessionID: hex.EncodeToString(id[:16]), Fingerprint: nativeFingerprint(n), History: []int{}, Files: []Artifact{}}
+	s.snapshot = NativeSnapshot{Notebook: copyNotebook(n), Engine: engine, SessionID: hex.EncodeToString(id[:16]), Fingerprint: nativeFingerprint(n), History: []int{}, Files: []Artifact{}}
 	buildTimeout, runTimeout := m.Kernel.BuildTimeout, m.Kernel.RunTimeout
 	if buildTimeout == 0 {
 		buildTimeout = 60 * time.Second
@@ -311,48 +347,60 @@ func (m *NativeManager) Start(ctx context.Context, n Notebook) (snap NativeSnaps
 		}
 		s.artifactHashes[name] = sha256.Sum256(data)
 	}
-	for name, data := range map[string]string{"main.go": src, "gobook_native.go": helper, "go.mod": m.Kernel.moduleFile(n)} {
-		if err = os.WriteFile(filepath.Join(dir, name), []byte(data), 0600); err != nil {
+	var binary string
+	if !s.interactive {
+		for name, data := range map[string]string{"main.go": src, "gobook_native.go": helper, "go.mod": m.Kernel.moduleFile(n)} {
+			if err = os.WriteFile(filepath.Join(dir, name), []byte(data), 0600); err != nil {
+				return snap, err
+			}
+		}
+		binary = filepath.Join(dir, "notebook")
+		if runtime.GOOS == "windows" {
+			binary += ".exe"
+		}
+		buildCtx, buildCancel := context.WithTimeout(ctx, buildTimeout)
+		stopBuild := context.AfterFunc(life, buildCancel)
+		started := time.Now()
+		err = runProcess(buildCtx, dir, s.output, "go", "build", "-p", "2", "-buildvcs=false", "-mod=mod", "-o", binary, ".")
+		s.provenance.BuildDurationNS = time.Since(started)
+		stopBuild()
+		buildCancel()
+		buildErr := err
+		if err = captureModules(dir, &s.provenance); err != nil {
+			if buildErr != nil {
+				err = fmt.Errorf("build: %v; %w", buildErr, err)
+			}
 			return snap, err
 		}
-	}
-	binary := filepath.Join(dir, "notebook")
-	if runtime.GOOS == "windows" {
-		binary += ".exe"
-	}
-	buildCtx, buildCancel := context.WithTimeout(ctx, buildTimeout)
-	stopBuild := context.AfterFunc(life, buildCancel)
-	started := time.Now()
-	err = runProcess(buildCtx, dir, s.output, "go", "build", "-p", "2", "-buildvcs=false", "-mod=mod", "-o", binary, ".")
-	s.provenance.BuildDurationNS = time.Since(started)
-	stopBuild()
-	buildCancel()
-	buildErr := err
-	if err = captureModules(dir, &s.provenance); err != nil {
 		if buildErr != nil {
-			err = fmt.Errorf("build: %v; %w", buildErr, err)
+			err = fmt.Errorf("native build: %w", buildErr)
+			return snap, err
 		}
-		return snap, err
-	}
-	if buildErr != nil {
-		err = fmt.Errorf("native build: %w", buildErr)
-		return snap, err
-	}
-	if err = verifyExactPins(n.Dependencies, s.provenance.GoMod); err != nil {
-		return snap, err
-	}
-	if info, e := buildinfo.ReadFile(binary); e == nil {
-		s.provenance.GoVersion = info.GoVersion
-		s.provenance.GoVersionSource = "notebook binary"
-		for _, setting := range info.Settings {
-			if setting.Key == "GOOS" {
-				s.provenance.GOOS = setting.Value
-			}
-			if setting.Key == "GOARCH" {
-				s.provenance.GOARCH = setting.Value
+		if err = verifyExactPins(n.Dependencies, s.provenance.GoMod); err != nil {
+			return snap, err
+		}
+		if info, e := buildinfo.ReadFile(binary); e == nil {
+			s.provenance.GoVersion = info.GoVersion
+			s.provenance.GoVersionSource = "notebook binary"
+			for _, setting := range info.Settings {
+				if setting.Key == "GOOS" {
+					s.provenance.GOOS = setting.Value
+				}
+				if setting.Key == "GOARCH" {
+					s.provenance.GOARCH = setting.Value
+				}
 			}
 		}
+	} else {
+		binary, err = os.Executable()
+		if err != nil {
+			return snap, err
+		}
+		s.provenance.BuildArgs = nil
+		s.provenance.GoVersionSource = "GoBook interactive worker (Yaegi v0.16.1)"
+		s.provenance.ModuleMode = "bundled standard library"
 	}
+
 	// Windows cannot remove files while startup reads or writes still hold them.
 	preparationDone()
 	listener, err := net.Listen("tcp4", "127.0.0.1:0")
@@ -365,9 +413,17 @@ func (m *NativeManager) Start(ctx context.Context, n Notebook) (snap NativeSnaps
 		return snap, err
 	}
 	auth := hex.EncodeToString(tokenBytes)
-	cmd := exec.CommandContext(life, binary)
+	args := []string{}
+	if s.interactive {
+		args = []string{"-interactive-worker"}
+		if len(m.WorkerCommand) > 0 {
+			binary = m.WorkerCommand[0]
+			args = m.WorkerCommand[1:]
+		}
+	}
+	cmd := exec.CommandContext(life, binary, args...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GOMAXPROCS=2", "GOWORK=off", "GOFLAGS=", "GOENV=off", "GOBOOK_NATIVE_ADDRESS="+listener.Addr().String(), "GOBOOK_NATIVE_TOKEN="+auth)
+	cmd.Env = append(os.Environ(), "GOMAXPROCS=2", "GOWORK=off", "GOFLAGS=", "GOENV=off", "GOBOOK_NATIVE_ADDRESS="+listener.Addr().String(), "GOBOOK_NATIVE_TOKEN="+auth, "GOBOOK_INTERACTIVE_MARKER="+marker)
 	stdout, stderr := &nativeStream{s: s}, &nativeStream{s: s, stderr: true}
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
@@ -435,7 +491,7 @@ func (m *NativeManager) Start(ctx context.Context, n Notebook) (snap NativeSnaps
 			deadline = d
 		}
 		_ = conn.SetReadDeadline(deadline)
-		reader = bufio.NewReaderSize(conn, 4096)
+		reader = bufio.NewReaderSize(conn, 16384)
 		var line []byte
 		line, err = reader.ReadSlice('\n')
 		if err == nil && string(line) == auth+"\n" {
@@ -486,7 +542,7 @@ func (s *nativeSession) waitReady(ctx context.Context, cell, sequence int) error
 		return fmt.Errorf("native worker control: %w", err)
 	}
 	var event nativeEvent
-	if len(line) > 1024 || json.Unmarshal(line, &event) != nil || event.Cell != cell || event.Sequence != sequence || event.Goroutines < 1 {
+	if len(line) > 16384 || json.Unmarshal(line, &event) != nil || event.Cell != cell || event.Sequence != sequence || event.Goroutines < 1 {
 		return errors.New("invalid native worker ready message")
 	}
 	for {
@@ -512,6 +568,7 @@ func (s *nativeSession) waitReady(ctx context.Context, cell, sequence int) error
 	}
 	s.snapshot.HeapAlloc = event.HeapAlloc
 	s.snapshot.Goroutines = event.Goroutines
+	s.snapshot.Error = event.Error
 	return nil
 }
 
@@ -559,16 +616,40 @@ func (m *NativeManager) execute(ctx context.Context, n Notebook, cell int, sessi
 		err = errors.New("native session is not ready; restart explicitly")
 	case historyLength >= 0 && (sessionID != s.snapshot.SessionID || historyLength != len(s.snapshot.History)):
 		err = errors.New("native session changed in another page; refresh status and restore the kernel notebook")
-	case nativeFingerprint(n) != s.snapshot.Fingerprint:
+	case !s.interactive && nativeFingerprint(n) != s.snapshot.Fingerprint:
 		err = errors.New("notebook source, imports, pins or inputs changed; restart required (live memory will be lost)")
-	case cell < 1 || cell > min(s.snapshot.NextCell, len(n.Cells)):
+	case s.interactive && len(n.Cells) > 1000:
+		err = errors.New("interactive sessions support at most 1000 cells")
+	case s.interactive && interactiveConfiguration(n) != s.configuration:
+		err = errors.New("input files or dependency configuration changed; restart required")
+	case cell < 1 || cell > len(n.Cells):
+		err = errors.New("cell is outside notebook")
+	case !s.interactive && cell > min(s.snapshot.NextCell, len(n.Cells)):
 		err = fmt.Errorf("cell %d is unavailable; execute a cell between 1 and %d (later cells must run sequentially)", cell, min(s.snapshot.NextCell, len(n.Cells)))
 	case len(s.snapshot.History) >= nativeHistoryLimit:
 		err = errors.New("native execution history limit reached (1000 commands); restart required")
 	}
+	if err == nil && s.interactive {
+		_, err = validateNotebook(n)
+		if err == nil {
+			err = supportedInteractiveImports(n.Imports)
+		}
+	}
 	if err != nil {
 		s.mu.Unlock()
 		return s.view(), err
+	}
+	var command []byte
+	if s.interactive {
+		var wire bytes.Buffer
+		encoder := json.NewEncoder(&wire)
+		encoder.SetEscapeHTML(false)
+		err = encoder.Encode(interactiveCommand{Cell: cell, Code: n.Cells[cell-1].Code, Imports: n.Imports})
+		if err != nil || wire.Len() > 512<<10 {
+			s.mu.Unlock()
+			return s.view(), errors.New("interactive command exceeds 512 KiB encoded limit")
+		}
+		command = wire.Bytes()
 	}
 	s.snapshot.Ready = false
 	s.snapshot.Error = ""
@@ -583,13 +664,21 @@ func (m *NativeManager) execute(ctx context.Context, n Notebook, cell int, sessi
 	if deadline, ok := runCtx.Deadline(); ok {
 		_ = conn.SetDeadline(deadline)
 	}
-	_, err = fmt.Fprintf(conn, "%d\n", cell)
+	if s.interactive {
+		_, err = conn.Write(command)
+	} else {
+		_, err = fmt.Fprintf(conn, "%d\n", cell)
+	}
 	stop()
 	started := time.Now()
 	accepted := err == nil
 	if err == nil {
 		s.mu.Lock()
 		s.snapshot.History = append(s.snapshot.History, cell)
+		if s.interactive {
+			s.snapshot.Fingerprint = nativeFingerprint(n)
+			s.snapshot.Notebook = copyNotebook(n)
+		}
 		s.mu.Unlock()
 		err = s.waitReady(runCtx, cell, sequence)
 	}
@@ -624,10 +713,17 @@ func (m *NativeManager) execute(ctx context.Context, n Notebook, cell int, sessi
 	}
 	s.snapshot.CurrentCell = cell
 	s.snapshot.NextCell = min(cell+1, len(n.Cells))
+	if s.interactive {
+		s.snapshot.NextCell = len(n.Cells)
+	}
 	s.snapshot.Ready = !s.closed
 	s.snapshot.Result = s.resultLocked(cell, time.Since(started))
 	s.snapshot.Result.Artifacts = changed
 	s.snapshot.Result.Cells[0].Artifacts = changed
+	if s.snapshot.Error != "" {
+		s.snapshot.Result.Error = s.snapshot.Error
+		err = errors.New(s.snapshot.Error)
+	}
 	if artifactErr != nil {
 		s.snapshot.Result.Error = artifactErr.Error()
 		s.snapshot.Error = artifactErr.Error()
@@ -635,7 +731,10 @@ func (m *NativeManager) execute(ctx context.Context, n Notebook, cell int, sessi
 	s.mu.Unlock()
 	snapshot := s.view()
 	snapshot.CommandAccepted = true
-	return snapshot, artifactErr
+	if artifactErr != nil {
+		return snapshot, artifactErr
+	}
+	return snapshot, err
 }
 
 func (s *nativeSession) fail(err error) {

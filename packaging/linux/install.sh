@@ -10,6 +10,11 @@ mkdir -p "$app" "$data_home/applications"
 chmod 700 "$app"
 install -m 755 "$here/gobook" "$app/gobook.new"
 mv -f -- "$app/gobook.new" "$app/gobook"
+if [[ -f "$here/gopls" ]]; then
+  install -m 755 "$here/gopls" "$app/gopls.new"
+  mv -f -- "$app/gopls.new" "$app/gopls"
+fi
+if [[ -f "$here/THIRD_PARTY_NOTICES.txt" ]]; then cp -- "$here/THIRD_PARTY_NOTICES.txt" "$app/"; fi
 cp -- "$here/icon.svg" "$app/icon.svg"
 {
   printf '#!/bin/bash\numask 077\nexport PATH=%q:"$PATH"\n' "$go_dir"
