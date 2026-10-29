@@ -2,7 +2,9 @@
 
 A small computational notebook for Go. Write editable cells in your browser, run them with the real Go compiler, and keep notes, output, and chart images together. The server and UI use the Go standard library; there is no Python runtime, CDN, telemetry, or AI service.
 
-**Status: early MVP.** GoBook currently computes Go code. NotebookLM-style document sources, retrieval, and AI Q&A are future work and are not implemented.
+Built by [Ali Farid](https://github.com/Alifarid0011).
+
+**Status: early research tool.** GoBook currently computes Go code. NotebookLM-style document sources, retrieval, and AI Q&A are future work and are not implemented.
 
 ![GoBook workspace with a chart computed from Go cells](docs/workspace.jpg)
 
@@ -11,9 +13,11 @@ A small computational notebook for Go. Write editable cells in your browser, run
 Install Go 1.25 or newer:
 
 ```sh
-go install github.com/Alifarid0011/gobook@v0.1.0
+go install github.com/Alifarid0011/gobook@v0.2.0
 gobook
 ```
+
+If your Go binary directory is not on PATH, use `go run github.com/Alifarid0011/gobook@v0.2.0` instead.
 
 Or run from a source checkout:
 
@@ -44,18 +48,45 @@ The browser layout adapts to small screens. The Go compiler and server run on a 
 
 ## Use
 
-1. Give the notebook a title and note.
-2. List package imports, separated by commas. Use package paths without aliases.
-3. Write Go statements in cells, then choose **Run all**.
-4. Save JSON in your browser; **Open JSON** loads a notebook without running it.
+1. Choose **Describe a sample**, **Explore a relationship**, **Inspect a distribution**, or **Train & save a model**. Loading an example never runs it.
+2. Replace the synthetic sample data with your own, and give the notebook a title and note.
+3. List package imports, separated by commas. Use package paths without aliases.
+4. Write Go statements in cells, then choose **Run all**.
+5. Save JSON in your browser; **Open JSON** loads a notebook without running it.
 
-Use Ctrl/Cmd+Enter to run all cells. Tab indents code; Shift+Tab moves keyboard
+Use Ctrl/Cmd+Enter to run all cells, or Shift+Enter inside a cell to run through it. Tab indents code; Shift+Tab moves keyboard
 focus out of the editor. Cell arrows reorder execution. Editing during a run
 keeps its output tied to the earlier source snapshot.
 
 All code cells are concatenated inside one `func main()`. Variables declared in an earlier cell are available below it. Imports belong in the explicit imports field; top-level function/type declarations can be written as local function values/types where Go permits. Standard Go compile rules apply, including unused imports. Build errors identify `cell1.go`, `cell2.go`, and so on.
 
-Every run compiles and launches a fresh process in a fresh temporary working directory. **Run all repeats every cell and every side effect.** There is no persistent kernel, partial execution, interrupt button, dependency editor, or live streaming output in this MVP. JSON stores source and notes; output is transient and is not saved in the notebook.
+Every run compiles and launches a fresh process in a fresh temporary directory. **Run all repeats every cell and every side effect.** Each cell also has **Run to here**: it executes cells 1 through that cell in a fresh process. The whole notebook is compiled, so syntax/type errors in later cells can still block a run. Partial runs require complete statements in each cell and do not support `goto`; use Run all for code with cross-cell blocks or jumps. This keeps Go imports and references valid; it is not a persistent REPL or isolated cell execution. There is no interrupt button or live output streaming.
+
+Use **Both / Code / Results** to choose a layout. On small screens the interface brings completed results into view unless you are still editing. Figure expansion supports keyboard dismissal. Results and figures can be downloaded individually.
+
+### Save and replay an experiment
+
+**Save notebook** downloads the current source, dependency pins and input files. **Save experiment** downloads a versioned bundle containing the source snapshot used by the last run, its inputs, captured output, generated files and compiler/module provenance. If you edited during execution, the experiment still contains the earlier source. Later edits belong to Save notebook. Downloaded files are your durable copy; no server history or automatic backup is provided.
+
+**Open JSON** accepts either format. Imported results are labeled historical and unverified by the current host; opening them never executes code. Run details include UTC timestamps, compiler/platform, generated `go.mod`/`go.sum`, timeouts and build/run durations. Durations are diagnostics, not controlled benchmark results. A recorded module lock is provenance, not an enforced offline replay environment.
+
+### Dependencies and input data
+
+Open **Experiment settings** and specify direct module versions:
+
+```json
+{"github.com/Alifarid0011/gobook": "v0.2.0"}
+```
+
+Versions must be exact Go semantic versions. Branches, `latest`, local paths and conflicting transitive upgrades are rejected. Pins take priority over built-in chartframe/Gonum defaults. Builds run with `GOWORK=off`, empty `GOFLAGS`, and `GOENV=off` so hidden workspace/modfile/overlay configuration cannot replace the recorded graph. Export cache, proxy and private-module settings as environment variables if needed; saved `go env -w` settings are not read. Downloading/compiling dependencies uses the host's network and permissions.
+
+Attach up to eight `.csv` or `.json` inputs, at most 128 KiB decoded in total. Names must use letters, digits, underscores or dashes before the extension (maximum 59 characters); reserved device names and case-insensitive duplicates are rejected. Code reads them from its temporary directory. Notebook JSON and its complete execution request must fit 256 KiB.
+
+### A complete small-model workflow
+
+**Train & save a model** reads synthetic CSV, makes a documented ordered holdout, fits single-predictor OLS using only training rows, evaluates MAE/RMSE/R², saves `model.json`, reloads it, and exports `predictions.csv`. **Use a saved model** loads an attached `model.json` for new predictions. Generated data/model files have a download link and **Use as input** action. The current model owns only a small coefficient state; `Close` invalidates it. No resident transformer/GPU runtime is implemented.
+
+See [tabular](tabular/README.md) for numerical behavior, lifecycle, schema, ownership and limitations. This is one transparent workflow, not a scikit-learn replacement.
 
 ### Charts and numerical packages
 
@@ -67,7 +98,7 @@ go run . -chartframe /absolute/path/to/chartframe
 
 The default lookup is `../chartframe` relative to the launch directory. Open `examples/sine.gobook.json` to sample a sine function and render SVG. GoBook displays regular `.svg` and `.png` files from the run directory as images. Files are collected only from the directory's top level. Use ordinary relative filenames, for example `sine.svg`.
 
-Imports under `gonum.org/v1/gonum/` add Gonum v0.17.0 to the temporary module. chartframe uses v0.1.0 unless a local module replacement is configured. Module downloads use the host's Go module cache/network configuration; a first run can take longer. Other third-party modules are outside the current dependency setup.
+Imports under `gonum.org/v1/gonum/` add Gonum v0.17.0 to the temporary module. chartframe uses v0.1.0 unless a local module replacement is configured. Module downloads use the host's Go module cache/network configuration; a first run can take longer. Other third-party modules can be declared through exact dependency pins.
 
 `examples/simulation.gobook.json` runs a reproducible Monte Carlo experiment with a fixed random seed. Its timing excludes compilation and makes no cross-language performance claim.
 
@@ -79,7 +110,7 @@ The server checks the exact listening Host, rejects cross-origin requests, and r
 
 Execution is serial (another run receives HTTP 409). Requests are capped at 256 KiB. Captured stdout and stderr share a 1 MiB budget; further output is discarded and marked truncated. Build timeout is 60 seconds, execution timeout is 30 seconds, with `GOMAXPROCS=2` and compiler `-p 2`. These reduce normal resource use; they are not CPU/memory/disk security quotas. POSIX process groups are killed on timeout and after execution; code can deliberately escape this mechanism. Windows tree termination uses `taskkill` and remains unverified locally.
 
-Up to 16 images and 8 MiB total are returned per run. Non-regular files and symlinks are skipped. Images use data URLs in `<img>` elements; SVG and notebook output are never inserted as active HTML. There is no arbitrary filesystem browsing API. Temporary run files are removed after collection.
+Up to 16 generated SVG, PNG, JSON or CSV files and 8 MiB total are returned per run. Unmodified input files are excluded. Non-regular files and symlinks are skipped. Images use data URLs in `<img>` elements; SVG and notebook output are never inserted as active HTML. There is no arbitrary filesystem browsing API. Temporary run files are removed after collection.
 
 ## Other devices and browser installation
 
@@ -105,4 +136,10 @@ go build ./...
 
 Tests exercise real compilation, syntax errors, bounded output, timeouts, artifact handling, imports, JSON round trips, and API request guards. CI is configured for Go 1.25 on Linux, macOS, and Windows; configured jobs are not evidence that those jobs have run.
 
-MIT license · alifarid
+## Research and citation
+
+The [research protocol](docs/research/manuscript.md) defines reproducibility and lifecycle experiments. It is a working draft by **Ali Farid**, not a peer-reviewed results paper. It reports no language ranking or new performance result. [Raw tabular microbenchmarks](tabular/benchmarks-go1.26.8-linux-amd64.txt) describe one development machine; they are not cross-language evidence.
+
+A [citation file](CITATION.cff) identifies this software and its author. Source code is MIT-licensed; do not assume that imported datasets or model weights share that license.
+
+MIT license · Ali Farid

@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "status": "working_protocol_not_preregistered_not_executed",
+  "date": "2026-10-29",
+  "author": {
+    "name": "Ali Farid",
+    "name_fa": "علی فرید",
+    "institutional_affiliation": null,
+    "orcid": null,
+    "name_confirmed": true
+  },
+  "primary_question": "Can an independent operator replay the exported experiment with matching provenance and numerically equivalent outputs?",
+  "data": {
+    "kind": "synthetic_one_predictor_float64_regression",
+    "rows": [
+      1000,
+      10000,
+      100000
+    ],
+    "seeds": [
+      101,
+      102,
+      103,
+      104,
+      105,
+      106,
+      107,
+      108,
+      109,
+      110
+    ],
+    "train_fraction": 0.8,
+    "split_artifact_required": true,
+    "license_manifest_required": true
+  },
+  "correctness": {
+    "absolute_tolerance": 1e-10,
+    "relative_tolerance": 1e-08,
+    "scope": "well_conditioned_float64_coefficients_and_predictions",
+    "exact_fields": [
+      "input_sha256",
+      "split_indices",
+      "row_counts",
+      "parse_rejection"
+    ],
+    "gate_performance_interpretation": true
+  },
+  "measurement": {
+    "fresh_processes_per_implementation_size_seed": 30,
+    "warmup_calls_per_process": 10,
+    "timed_warm_calls_per_process": 100,
+    "compilation_repetitions_per_cache_condition": 30,
+    "randomized_paired_order": true,
+    "profiling_separate_from_primary_timing": true
+  },
+  "independent_replay": {
+    "operators_planned": 1,
+    "clean_replays_per_host": 3,
+    "interpretation": "descriptive"
+  },
+  "analysis": {
+    "bootstrap_resamples": 10000,
+    "confidence_level": 0.95,
+    "resampling_units": [
+      "data_seed",
+      "paired_process_block"
+    ],
+    "automatic_outlier_removal": false
+  },
+  "pending_before_freeze": [
+    "author_contact_details",
+    "implementation_revision",
+    "executable_runner",
+    "conditioning_fixtures",
+    "exact_toolchain_and_dependencies",
+    "timing_instrumentation",
+    "randomization_and_analysis_seeds",
+    "license_manifest",
+    "independent_operator"
+  ],
+  "optional_extension": {
+    "same_backend_inference": "not_implemented_requires_protocol_amendment"
+  },
+  "future_study": {
+    "memory_budgeted_batching": "proposal_only_not_implemented_or_evaluated"
+  },
+  "results": null,
+  "implementation_status": {
+    "exact_dependency_pins": "under_implementation",
+    "model_json": "under_implementation",
+    "experiment_export": "under_implementation",
+    "persistent_worker": "future_work",
+    "evaluated_revision": null
+  }
+}
