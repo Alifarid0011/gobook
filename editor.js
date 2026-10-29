@@ -7,7 +7,7 @@ const GoBookEditor = (() => {
   const layer = document.createElement('div'); layer.className = 'code-highlight'; layer.setAttribute('aria-hidden','true');
   const content = document.createElement('div'); content.className = 'highlight-content'; layer.append(content); wrap.prepend(layer);
   const trace = document.createElement('div'); trace.className = 'trace-line'; trace.hidden = true; wrap.prepend(trace);
-  let marked = 0, timer, offsets = [0];
+  let marked = 0, selected = 0, timer, offsets = [0];
   const numbers = wrap.querySelector(".line-numbers");
   function position() {
    content.style.transform = 'translate(' + -editor.scrollLeft + 'px,' + -editor.scrollTop + 'px)';
@@ -27,8 +27,10 @@ const GoBookEditor = (() => {
    if (editor.wrap === 'soft') {
     const ruler = document.createElement('div'); Object.assign(ruler.style,{position:'fixed',left:'-100000px',top:'0',visibility:'hidden',whiteSpace:'pre-wrap',overflowWrap:'anywhere',font:style.font,lineHeight:style.lineHeight,tabSize:style.tabSize,width:(editor.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight))+'px'});
     for (const line of lines) { const row = document.createElement('div'); row.textContent = line || ' '; ruler.append(row); } document.body.append(ruler);
-    numbers.replaceChildren(); [...ruler.children].forEach((row,i) => { const height = row.getBoundingClientRect().height; offsets.push(offsets[i]+height); const label = document.createElement('div'); label.textContent = String(i+1); label.style.height = height+'px'; numbers.append(label); }); ruler.remove();
-   } else { numbers.textContent = lines.map((_,i)=>i+1).join('\n'); lines.forEach((_,i)=>offsets.push((i+1)*lineHeight)); }
+    [...ruler.children].forEach((row,i) => offsets.push(offsets[i]+row.getBoundingClientRect().height)); ruler.remove();
+   } else { lines.forEach((_,i)=>offsets.push((i+1)*lineHeight)); }
+   numbers.replaceChildren();
+   lines.forEach((_,i) => { const button = document.createElement('button'); button.type = 'button'; button.textContent = String(i+1); button.style.height = (offsets[i+1]-offsets[i])+'px'; button.className = 'gutter-line'; button.setAttribute('aria-label','Set breakpoint at line '+(i+1)); button.setAttribute('aria-pressed',String(selected === i+1)); button.onclick = () => { if (editor.readOnly) return; selected = i+1; refresh(); editor.dispatchEvent(new CustomEvent('gobook-breakpoint',{bubbles:true,detail:{line:i+1}})); }; numbers.append(button); });
    numbers.scrollTop = editor.scrollTop; position();
   }
   editor.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(refresh,60); });

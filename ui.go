@@ -26,6 +26,7 @@ for (const key of ['theme','font','indent','wrap']) $('pref-'+key).onchange = ()
 applyPreferences();
 function setView(view) {
  document.body.dataset.view = view;
+ document.querySelectorAll('.side-link[href]').forEach(link => { const selected = link.hash === (view === 'results' ? '#results' : '#notebook'); link.classList.toggle('active',selected); if (selected) link.setAttribute('aria-current','location'); else link.removeAttribute('aria-current'); });
  document.querySelectorAll('button[data-view]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.view === view)));
 }
 document.querySelectorAll('button[data-view]').forEach(button => button.onclick = () => setView(button.dataset.view));
@@ -91,7 +92,7 @@ function notify(message) {
  $('toast').textContent = message; $('toast').hidden = false;
  clearTimeout(toastTimer); toastTimer = setTimeout(() => $('toast').hidden = true, 3500);
 }
-function setStatus(message, state = '') { $('status').textContent = message; $('status').dataset.state = state; }
+function setStatus(message, state = '') { for (const el of [$('status'),$('inline-status')]) { el.textContent = message; el.dataset.state = state; } }
 function updateConnection() {
  $('run').disabled = busy || debugging || loadingExample || !token;
  $('debug-start').disabled = busy || loadingExample || !token;
@@ -115,6 +116,7 @@ addEventListener('beforeinstallprompt', e => { e.preventDefault(); installPrompt
 $('install').onclick = async () => { if (installPrompt) { await installPrompt.prompt(); installPrompt = null; $('install').hidden = true; } };
 addEventListener('appinstalled', () => { $('install').hidden = true; notify('GoBook installed.'); });
 function markChanged() {
+ document.querySelectorAll('.cell-output-heading').forEach(el => el.textContent = 'Previous run · source changed');
  changed = true; $('save-state').textContent = 'Unsaved changes';
  $('import-summary').textContent = $('imports').value || 'No imports';
  if ($('output').querySelector('pre,figure')) $('execution-note').textContent = 'Notebook edited · run again to refresh results.';
@@ -141,7 +143,7 @@ function addCell(code = '', focus = false) {
  };
  actions.append(runCell, up, down, remove); head.append(label, actions);
  const wrap = document.createElement('div'); wrap.className = 'editor-wrap';
- const lines = document.createElement('div'); lines.className = 'line-numbers'; lines.setAttribute('aria-hidden', 'true');
+ const lines = document.createElement('div'); lines.className = 'line-numbers'; lines.setAttribute('role','group'); lines.setAttribute('aria-label','Breakpoint lines');
  const editor = document.createElement('textarea'); editor.value = code; editor.spellcheck = false; editor.autocapitalize = 'off'; editor.autocomplete = 'off'; editor.wrap = 'off';
  function updateLines() { lines.textContent = Array.from({ length: editor.value.split('\n').length }, (_, i) => i + 1).join('\n'); lines.scrollTop = editor.scrollTop; }
  editor.addEventListener('input', () => { updateLines(); markChanged(); });
@@ -151,8 +153,9 @@ function addCell(code = '', focus = false) {
   if (e.key === 'Enter' && e.shiftKey && !e.ctrlKey && !e.metaKey) { e.preventDefault(); runNotebook([...$('cells').children].indexOf(section) + 1); return; }
   if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); editor.setRangeText(' '.repeat(preferences.indent), editor.selectionStart, editor.selectionEnd, 'end'); updateLines(); editorViews.get(editor)?.refresh(); markChanged(); }
  });
+ const output = document.createElement('section'); output.className = 'cell-output'; output.hidden = true; output.setAttribute('aria-label','Cell output');
  const foot = document.createElement('div'); foot.className = 'cell-foot'; foot.textContent = 'Shift Enter · Run to here repeats earlier cells in a fresh process';
- wrap.append(lines, editor); section.append(head, wrap, foot); $('cells').append(section); updateLines(); renumber();
+ wrap.append(lines, editor); section.append(head, wrap, foot, output); $('cells').append(section); updateLines(); renumber();
  editor.style.tabSize = preferences.indent; editor.wrap = preferences.wrap ? 'soft' : 'off';
  editorViews.set(editor, GoBookEditor.attach(wrap, editor));
  editor.style.height = Math.min(420, Math.max(128, (code.split('\n').length + 2) * 20)) + 'px';
@@ -189,6 +192,7 @@ function load(n) {
  if (n.files !== undefined && (!Array.isArray(n.files) || n.files.length > 8 || !n.files.every(f => f && typeof f.name === 'string' && typeof f.data === 'string'))) throw Error('Invalid notebook input files');
  const priorFiles = inputFiles; inputFiles = [];
  try { attachFiles(n.files || []); } catch (e) { inputFiles = priorFiles; showFiles(); throw e; }
+ clearCellOutputs();
  $('title').value = n.title; $('note').value = n.note; $('imports').value = n.imports.join(', '); $('import-summary').textContent = $('imports').value || 'No imports'; $('dependencies').value = JSON.stringify(n.dependencies || {}, null, 2);
  $('cells').replaceChildren(); n.cells.forEach(c => addCell(c.code)); renumber();
  exportText(); setExperiment(); setView('both'); $('starters').open = false;
@@ -198,7 +202,7 @@ function load(n) {
 $('add').onclick = () => { addCell('', true); markChanged(); };
 $('new').onclick = () => {
  if (changed && !confirm('Start a new notebook? Save your changes first.')) return;
- load({ version: 1, title: 'Untitled exploration', note: '', imports: ['fmt'], cells: [{ code: 'fmt.Println("Hello, GoBook")' }] });
+ load({ version: 1, title: 'Untitled notebook', note: '', imports: ['fmt'], cells: [{ code: 'fmt.Println("Hello, GoBook")' }] });
  $('save-state').textContent = 'Unsaved notebook'; setStatus(token ? 'Ready when you are' : 'Connect a host to run'); $('title').focus();
 };
 $('sidebar-new').onclick = () => $('new').click();
@@ -224,7 +228,7 @@ $('load').onclick = () => $('file').click();
 $('file').onchange = async () => {
  const file = $('file').files[0]; if (!file) return;
  try {
-  if (file.size > 16*1024*1024) throw Error('File exceeds 16 MiB');
+  if (file.size > 32*1024*1024) throw Error('File exceeds 32 MiB');
   if (changed && !confirm('Open this notebook? Save your current changes first.')) return;
   loadingExample = true; setBusy(false);
   const value = JSON.parse(await file.text());
@@ -237,13 +241,22 @@ $('file').onchange = async () => {
  }
  catch (e) { notify(e.message); } finally { $('file').value = ''; loadingExample = false; setBusy(false); }
 };
-function textOutput(label, text, error = false) {
+function textOutput(label, text, error = false, parent = $('output')) {
  if (!text) return; const title = document.createElement('p'); title.className = 'output-label'; title.textContent = label;
- const pre = document.createElement('pre'); pre.textContent = text; if (error) pre.className = 'error'; $('output').append(title, pre);
+ const pre = document.createElement('pre'); pre.textContent = text; if (error) pre.className = 'error'; parent.append(title, pre);
 }
 function validateResult(result) {
  if (!result || typeof result !== 'object' || Array.isArray(result)) throw Error('Invalid experiment result');
  for (const key of ['stdout','stderr','error']) if (result[key] !== undefined && (typeof result[key] !== 'string' || result[key].length > 1048576)) throw Error('Invalid experiment output');
+ const cells = result.cells || [];
+ if (!Array.isArray(cells) || cells.length > 1000) throw Error('Invalid cell outputs');
+ let cellBytes = 0; const seenCells = new Set(), cellArtifacts = new Set();
+ for (const c of cells) {
+  if (!c || !Number.isInteger(c.cell) || c.cell < 1 || c.cell > 1000 || seenCells.has(c.cell)) throw Error('Invalid cell index'); seenCells.add(c.cell);
+  for (const k of ['stdout','stderr']) { if (typeof c[k] !== 'string') throw Error('Invalid cell output'); cellBytes += c[k].length; }
+  if (cellBytes > 1048576 || !Array.isArray(c.artifacts || []) || (c.artifacts || []).length > 16) throw Error('Invalid cell output size');
+  for (const a of c.artifacts || []) { if (cellArtifacts.has(a?.name) || !(result.artifacts || []).some(original => original.name === a?.name && original.mime === a?.mime && original.data === a?.data)) throw Error('Cell artifact does not match result'); cellArtifacts.add(a.name); }
+ }
  const artifacts = result.artifacts || []; if (!Array.isArray(artifacts) || artifacts.length > 16) throw Error('Invalid experiment artifacts');
  let total = 0;
  for (const a of artifacts) {
@@ -264,12 +277,8 @@ function tablePreview(artifact) {
   table.append(caption,head,body); container.append(table); return container;
  } catch { return null; }
 }
-function renderResult(result) {
- validateResult(result); $('output').replaceChildren();
-  textOutput('STANDARD OUTPUT', result.stdout); textOutput('BUILD & RUN DIAGNOSTICS', result.stderr); textOutput('EXECUTION ERROR', result.error, true);
-  if (result.truncated) textOutput('OUTPUT LIMIT', 'Output was truncated at 1 MiB.');
-  exportText([result.stdout, result.stderr, result.error, result.truncated ? 'Output was truncated at 1 MiB.' : ''].filter(Boolean).join('\n'));
-  for (const artifact of result.artifacts || []) {
+function renderArtifacts(artifacts, parent) {
+ for (const artifact of artifacts || []) {
    const figure = document.createElement('figure'); figure.className = 'artifact'; const caption = document.createElement('figcaption'); caption.textContent = artifact.name;
    const uri = 'data:' + artifact.mime + ';base64,' + artifact.data;
    const img = document.createElement('img'); img.alt = artifact.name; img.src = uri;
@@ -282,10 +291,44 @@ function renderResult(result) {
     const use = document.createElement('button'); use.className = 'use-artifact'; use.textContent = 'Use as input'; use.onclick = () => { if (busy || debugging || loadingExample) { notify('Stop the current session before changing its inputs.'); return; } try { attachFiles([{name: artifact.name, data: artifact.data}]); notify('Attached to the current notebook. It will be available on the next run.'); } catch (e) { notify(e.message); } };
     const description = document.createElement('p'); description.className = 'file-description'; description.textContent = 'Generated data or model file'; actions.append(use, save); figure.append(caption, tablePreview(artifact) || description, actions);
    }
-   $('output').append(figure);
+   parent.append(figure);
   }
-  if (!$('output').childNodes.length) emptyOutput('Quietly complete.', 'Your code finished successfully without producing output.');
-
+}
+function clearCellOutputs() {
+ document.querySelectorAll('.cell-output').forEach(el => { el.replaceChildren(); el.hidden = true; });
+ document.body.classList.remove('has-cell-outputs'); document.querySelector('.unassigned-output')?.remove();
+}
+function renderResult(result, inline = true) {
+ validateResult(result); $('output').replaceChildren(); clearCellOutputs();
+ textOutput('STANDARD OUTPUT', result.stdout); textOutput('BUILD & RUN DIAGNOSTICS', result.stderr); textOutput('EXECUTION ERROR', result.error, true);
+ if (result.truncated) textOutput('OUTPUT LIMIT', 'Output was truncated at 1 MiB.');
+ exportText([result.stdout,result.stderr,result.error,result.truncated ? 'Output was truncated at 1 MiB.' : ''].filter(Boolean).join('\n'));
+ renderArtifacts(result.artifacts, $('output'));
+ if (inline && result.cells?.length) {
+  document.body.classList.add('has-cell-outputs');
+  const assigned = new Set(result.cells.flatMap(c => (c.artifacts || []).map(a => a.name)));
+  const unassigned = (result.artifacts || []).filter(a => !assigned.has(a.name));
+  const assignedOut=result.cells.map(c=>c.stdout).join(''), assignedErr=result.cells.map(c=>c.stderr).join('');
+  const globalOut=(result.stdout || '').endsWith(assignedOut) ? (result.stdout || '').slice(0,(result.stdout || '').length-assignedOut.length) : '';
+  const globalErr=(result.stderr || '').endsWith(assignedErr) ? (result.stderr || '').slice(0,(result.stderr || '').length-assignedErr.length) : '';
+  if (result.error || result.truncated || unassigned.length || globalOut || globalErr) {
+   const diagnostics=document.createElement('section'); diagnostics.className='unassigned-output';
+   textOutput('INITIALIZATION OUTPUT',globalOut,false,diagnostics); textOutput('BUILD & INITIALIZATION DIAGNOSTICS',globalErr,false,diagnostics);
+   textOutput('EXECUTION ERROR',result.error,true,diagnostics);
+   if (result.truncated) textOutput('OUTPUT LIMIT','Output was truncated at 1 MiB.',true,diagnostics);
+   if (unassigned.length) textOutput('OTHER FILES','These files could not be attributed to a cell.',false,diagnostics);
+   renderArtifacts(unassigned,diagnostics); $('results').append(diagnostics);
+  }
+  for (const cell of result.cells) {
+   const target = $('cells').children[cell.cell-1]?.querySelector('.cell-output'); if (!target) continue;
+   target.hidden = false;
+   const heading = document.createElement('div'); heading.className = 'cell-output-heading'; heading.textContent = 'OUT ['+cell.cell+']'; target.append(heading);
+   textOutput('OUTPUT',cell.stdout,false,target); textOutput('STDERR',cell.stderr,true,target);
+   renderArtifacts(cell.artifacts,target);
+   if (!cell.stdout && !cell.stderr && !cell.artifacts?.length) { const quiet = document.createElement('p'); quiet.textContent = result.error ? 'No captured output. See run diagnostics.' : 'Completed without output.'; quiet.className = 'cell-quiet'; target.append(quiet); }
+  }
+ }
+ if (!$('output').childNodes.length) emptyOutput('Quietly complete.', 'Your code finished successfully without producing output.');
 }
 function setBusy(value) {
  busy = value; document.body.classList.toggle('running', value); $('run-label').textContent = value ? 'Running' : 'Run all';
@@ -300,7 +343,7 @@ function setBusy(value) {
 async function runNotebook(through = null) {
  if (busy || debugging || loadingExample || !token) return;
  let snapshot, sourceSnapshot; try { const n = notebook(); sourceSnapshot = JSON.stringify(n); if (through !== null) n.runThrough = through; snapshot = JSON.stringify(n); if (new TextEncoder().encode(snapshot).length > 262144) throw Error('Notebook request exceeds 256 KiB. Reduce code or attached inputs.'); } catch (e) { notify(e.message); return; }
- const start = performance.now(); setBusy(true);
+ const start = performance.now(); clearCellOutputs(); setBusy(true);
  exportText(); setExperiment();
  emptyOutput('A thought in motion.', 'Compiling and running your Go notebook…');
  const elapsed = () => ((performance.now() - start) / 1000).toFixed(1);
@@ -310,11 +353,12 @@ async function runNotebook(through = null) {
   const response = await fetch('/api/run', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' }, body: snapshot });
   if (!response.ok) throw Error(await response.text());
   const result = await response.json(); $('output').replaceChildren();
-  renderResult(result); setExperiment({format:'gobook-experiment',version:1,notebook:JSON.parse(snapshot),result});
+  let matches = false; try { matches = JSON.stringify(notebook()) === sourceSnapshot; } catch {}
+  renderResult(result, matches); setExperiment({format:'gobook-experiment',version:1,notebook:JSON.parse(snapshot),result});
   clearInterval(runTimer); setStatus((result.error ? 'Failed' : 'Complete') + (through !== null ? ' · through cell ' + through : '') + ' · ' + elapsed() + 's', result.error ? 'error' : 'success');
   let edited = true; try { edited = JSON.stringify(notebook()) !== sourceSnapshot; } catch {}
   $('execution-note').textContent = edited ? 'Notebook edited during run · results reflect earlier code.' : (result.error ? 'Review the diagnostics, adjust, and try again.' : (through !== null ? (through === 1 ? 'Cell 1 executed.' : 'Cells 1–' + through + ' executed.') + ' Later cells were compiled but not executed.' : 'Fresh process finished. Keep exploring.'));
-  if (matchMedia('(max-width: 1120px)').matches && !document.activeElement.matches('textarea,input')) { setView('results'); $('workspace').scrollIntoView({ block: 'start' }); }
+  if (result.cells?.length && matches) { setView('both'); if (through !== null) $('cells').children[through-1]?.querySelector('.cell-output')?.scrollIntoView({block:'nearest'}); }
  } catch (e) {
   clearInterval(runTimer); $('output').replaceChildren(); textOutput('REQUEST ERROR', e.message, true); exportText(e.message); setStatus('Could not run · ' + elapsed() + 's', 'error');
   $('execution-note').textContent = 'Check that your local GoBook host is running.';

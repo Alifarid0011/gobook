@@ -13,11 +13,11 @@ Built by [Ali Farid](https://github.com/Alifarid0011).
 Install Go 1.25 or newer:
 
 ```sh
-go install github.com/Alifarid0011/gobook@v0.3.0
+go install github.com/Alifarid0011/gobook@v0.4.0
 gobook
 ```
 
-If your Go binary directory is not on PATH, use `go run github.com/Alifarid0011/gobook@v0.3.0` instead.
+If your Go binary directory is not on PATH, use `go run github.com/Alifarid0011/gobook@v0.4.0` instead.
 
 Or run from a source checkout:
 
@@ -75,7 +75,7 @@ All code cells are concatenated inside one `func main()`. Variables declared in 
 
 Every run compiles and launches a fresh process in a fresh temporary directory. **Run all repeats every cell and every side effect.** Each cell also has **Run to here**: it executes cells 1 through that cell in a fresh process. The whole notebook is compiled, so syntax/type errors in later cells can still block a run. Partial runs require complete statements in each cell and do not support `goto`; use Run all for code with cross-cell blocks or jumps. This keeps Go imports and references valid; it is not a persistent REPL or isolated cell execution. There is no interrupt button or live output streaming.
 
-Use **Both / Code / Results** to choose a layout. On small screens the interface brings completed results into view unless you are still editing. Figure expansion supports keyboard dismissal. Results and figures can be downloaded individually.
+Use **Notebook / Code / Results** to show inline outputs, code only, or aggregate results. On small screens the notebook keeps output beside its source. Figure expansion supports keyboard dismissal. Results and figures can be downloaded individually.
 
 ### Debug a notebook
 
@@ -182,3 +182,19 @@ The [research protocol](docs/research/manuscript.md) defines reproducibility and
 A [citation file](CITATION.cff) identifies this software and its author. Source code is MIT-licensed; do not assume that imported datasets or model weights share that license.
 
 MIT license · Ali Farid
+
+### Inline outputs and debugging workspace
+
+Normal runs show text, stderr, supported tables and figures below each originating
+cell. Cells compile and execute together once, preserving shared variables without
+repeating side effects. File ownership follows the last observed content change;
+abrupt exits and cross-cell control structures can leave aggregate-only output.
+Editing source labels previous inline outputs as stale.
+
+Click a line number to choose a breakpoint. The source-adjacent debug dock follows
+the current line and displays local values; changed values are highlighted briefly.
+Use F8 to continue/pause, F10 to step over, F11 to step in and Shift+F11 to step out.
+The dock adapts to a stacked layout on narrow displays.
+
+See [capabilities and remaining Jupyter work](docs/jupyter-compatibility.md) for
+exact behavior and the next milestones. Full Jupyter parity is not implemented.

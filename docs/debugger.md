@@ -69,3 +69,15 @@ The integration tests also run automatically when `dlv` is on `PATH`; otherwise
 only the portable protocol, validation, and HTTP checks run. Finding an installed
 Delve and then failing to launch or trace the target fails the test, rather than
 silently skipping it.
+
+## Workspace controls
+
+Select a breakpoint from the editor's line-number gutter. The debug dock stays
+beside source on desktop and stacks above it on narrow screens. While paused,
+the current source line is highlighted and the dock shows local values, arguments,
+stack frames and output. Changed values are highlighted briefly. Start options
+collapse during an active session to make room for inspection.
+
+Shortcuts during a session: F8 continues/pauses, F10 steps over, F11 steps in,
+and Shift+F11 steps out. Normal notebook runs and debugging use separate fresh
+processes; prior cell outputs are cleared when starting a debug session.

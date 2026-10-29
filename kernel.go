@@ -70,13 +70,20 @@ type Artifact struct {
 	MIME string `json:"mime"`
 	Data string `json:"data"`
 }
+type CellResult struct {
+	Cell      int        `json:"cell"`
+	Stdout    string     `json:"stdout"`
+	Stderr    string     `json:"stderr"`
+	Artifacts []Artifact `json:"artifacts,omitempty"`
+}
 type Result struct {
-	Stdout     string     `json:"stdout"`
-	Stderr     string     `json:"stderr"`
-	Error      string     `json:"error,omitempty"`
-	Truncated  bool       `json:"truncated"`
-	Artifacts  []Artifact `json:"artifacts"`
-	Provenance Provenance `json:"provenance"`
+	Cells      []CellResult `json:"cells,omitempty"`
+	Stdout     string       `json:"stdout"`
+	Stderr     string       `json:"stderr"`
+	Error      string       `json:"error,omitempty"`
+	Truncated  bool         `json:"truncated"`
+	Artifacts  []Artifact   `json:"artifacts"`
+	Provenance Provenance   `json:"provenance"`
 }
 type Kernel struct {
 	Chartframe               string
@@ -311,7 +318,7 @@ func (k Kernel) Run(ctx context.Context, n Notebook) (r Result) {
 		r.Provenance.RunThrough = &selected
 	}
 	defer func() { r.Provenance.Finished = time.Now().UTC() }()
-	src, err := source(n)
+	src, helper, marker, err := tracedSource(n)
 	if err != nil {
 		r.Error = err.Error()
 		return r
@@ -332,13 +339,17 @@ func (k Kernel) Run(ctx context.Context, n Notebook) (r Result) {
 		}
 	}
 
-	for name, data := range map[string]string{"go.mod": mod, "main.go": src} {
+	sources := map[string]string{"go.mod": mod, "main.go": src}
+	if helper != "" {
+		sources["gobook_trace.go"] = helper
+	}
+	for name, data := range sources {
 		if err = os.WriteFile(filepath.Join(dir, name), []byte(data), 0600); err != nil {
 			r.Error = err.Error()
 			return r
 		}
 	}
-	c := &capture{remaining: outputLimit}
+	c := &capture{remaining: outputLimit + len(n.Cells)*(len(marker)+24)*2}
 	buildTimeout := k.BuildTimeout
 	if buildTimeout == 0 {
 		buildTimeout = 60 * time.Second
@@ -405,6 +416,7 @@ func (k Kernel) Run(ctx context.Context, n Notebook) (r Result) {
 		}
 		r.Error += err.Error()
 	}
+	attributeCells(&r, dir, marker, len(n.Cells))
 	return r
 }
 
