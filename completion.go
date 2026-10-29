@@ -182,17 +182,21 @@ func localCompletions(n Notebook, cell, offset int) []CompletionItem {
 type lspReply struct {
 	ID     int             `json:"id"`
 	Method string          `json:"method"`
+	Params json.RawMessage `json:"params"`
 	Result json.RawMessage `json:"result"`
 	Error  *struct {
 		Message string `json:"message"`
 	} `json:"error"`
 }
 type completionProcess struct {
-	cmd     *exec.Cmd
-	in      io.WriteCloser
-	replies chan lspReply
-	done    chan struct{}
-	writeMu sync.Mutex
+	cmd          *exec.Cmd
+	in           io.WriteCloser
+	replies      chan lspReply
+	done         chan struct{}
+	writeMu      sync.Mutex
+	diagnosticMu sync.Mutex
+	diagnostic   string
+	stderr       *capture
 }
 
 func (p *completionProcess) bindContext(ctx context.Context) func() bool {
@@ -261,7 +265,7 @@ func (p *completionProcess) rpc(ctx context.Context, id int, method string, para
 		case reply := <-p.replies:
 			if reply.ID == id {
 				if reply.Error != nil {
-					return nil, errors.New(reply.Error.Message)
+					return nil, p.protocolError(reply.Error.Message)
 				}
 				return reply.Result, nil
 			}
@@ -335,7 +339,8 @@ func (c *CompletionManager) start(ctx context.Context, module string) error {
 		in.Close()
 		return err
 	}
-	cmd.Stderr = io.Discard
+	diagnostics := &capture{remaining: 8192}
+	cmd.Stderr = stream{c: diagnostics, stderr: true}
 	configureProcess(cmd)
 	if err = cmd.Start(); err != nil {
 		in.Close()
@@ -343,7 +348,7 @@ func (c *CompletionManager) start(ctx context.Context, module string) error {
 		c.closeLocked()
 		return err
 	}
-	p := &completionProcess{cmd: cmd, in: in, replies: make(chan lspReply, 8), done: make(chan struct{})}
+	p := &completionProcess{cmd: cmd, in: in, replies: make(chan lspReply, 8), done: make(chan struct{}), stderr: diagnostics}
 	c.p = p
 	c.module = module
 	stopWrite := p.bindContext(ctx)
@@ -354,6 +359,20 @@ func (c *CompletionManager) start(ctx context.Context, module string) error {
 			reply, err := readLSP(reader)
 			if err != nil {
 				break
+			}
+			if reply.Method == "window/showMessage" || reply.Method == "window/logMessage" {
+				var message struct {
+					Type    int    `json:"type"`
+					Message string `json:"message"`
+				}
+				if json.Unmarshal(reply.Params, &message) == nil && message.Type <= 2 {
+					p.diagnosticMu.Lock()
+					p.diagnostic += message.Message + "\n"
+					if len(p.diagnostic) > 8192 {
+						p.diagnostic = p.diagnostic[len(p.diagnostic)-8192:]
+					}
+					p.diagnosticMu.Unlock()
+				}
 			}
 			if reply.Method != "" && reply.ID != 0 {
 				_ = p.send(map[string]any{"jsonrpc": "2.0", "id": reply.ID, "result": nil})
@@ -570,4 +589,19 @@ func mapCompletionRange(code string, edit completionRange, baseLine, cursor int)
 	}
 	end, ok := convert(edit.End)
 	return start, end, ok && start <= cursor && end >= cursor && start <= end
+}
+
+func (p *completionProcess) protocolError(message string) error {
+	p.diagnosticMu.Lock()
+	diagnostic := p.diagnostic
+	p.diagnosticMu.Unlock()
+	if p.stderr != nil {
+		p.stderr.mu.Lock()
+		diagnostic += p.stderr.err.String()
+		p.stderr.mu.Unlock()
+	}
+	if diagnostic != "" {
+		return fmt.Errorf("%s: %s", message, diagnostic)
+	}
+	return errors.New(message)
 }
