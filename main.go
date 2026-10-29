@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strings"
@@ -24,7 +25,42 @@ func main() {
 	external := flag.String("public-origin", "", "optional HTTPS reverse proxy origin, for example https://book.example")
 	delve := flag.String("delve", "dlv", "Delve executable for optional interactive debugging")
 	launch := flag.Bool("open", false, "open the local workspace in your default browser")
+	desktop := flag.Bool("desktop", false, "start or reopen the local desktop host")
+	desktopDir := flag.String("desktop-dir", "", "private desktop state directory (defaults to user config/gobook)")
 	flag.Parse()
+	if *desktop {
+		flag.Visit(func(f *flag.Flag) {
+			if f.Name == "public-origin" && *external != "" {
+				log.Fatal("desktop mode is local only")
+			}
+		})
+		explicitAddr, explicitOpen := false, false
+		flag.Visit(func(f *flag.Flag) {
+			explicitAddr = explicitAddr || f.Name == "addr"
+			explicitOpen = explicitOpen || f.Name == "open"
+		})
+		if !explicitAddr {
+			*addr = desktopAddress
+		}
+		if !explicitOpen {
+			*launch = true
+		}
+		var e error
+		*desktopDir, e = desktopStateDir(*desktopDir)
+		if e != nil {
+			log.Fatal(e)
+		}
+		cache, e := os.UserCacheDir()
+		if e != nil {
+			log.Fatal(e)
+		}
+		if e = configureDesktopTemp(cache); e != nil {
+			log.Fatal(e)
+		}
+		if _, e = exec.LookPath("go"); e != nil {
+			log.Fatal("Go compiler not found. Install Go 1.25+ from https://go.dev/dl/ before running GoBook Local.")
+		}
+	}
 	origin, err := publicOrigin(*external)
 	if err != nil {
 		log.Fatal(err)
@@ -56,7 +92,20 @@ func main() {
 	}
 	listener, err := net.Listen("tcp4", *addr)
 	if err != nil {
+		if *desktop {
+			if e := reopenDesktop(*desktopDir, *addr, *launch); e != nil {
+				log.Fatal(e)
+			}
+			return
+		}
 		log.Fatal(err)
+	}
+	if *desktop {
+		address := fmt.Sprintf("http://%s/?token=%s", listener.Addr().String(), hex.EncodeToString(token))
+		if err := saveDesktopURL(*desktopDir, address); err != nil {
+			listener.Close()
+			log.Fatal(err)
+		}
 	}
 	s := &Server{Token: hex.EncodeToString(token), Host: listener.Addr().String(), Kernel: Kernel{Chartframe: *chart}, PublicOrigin: origin}
 	s.Native = &NativeManager{Kernel: s.Kernel}
@@ -77,10 +126,27 @@ func main() {
 	server := &http.Server{Handler: s, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 100 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
 	shutdown, cancelShutdown := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancelShutdown()
-	go func() { <-shutdown.Done(); _ = s.Debugger.Stop(); _ = s.Native.Stop(); _ = server.Close() }()
+	server.BaseContext = func(net.Listener) context.Context { return shutdown }
+	if *desktop {
+		s.DesktopQuit = cancelShutdown
+	}
+	shutdownDone := make(chan struct{})
+	go func() {
+		defer close(shutdownDone)
+		<-shutdown.Done()
+		_ = s.Debugger.Stop()
+		_ = s.Native.Stop()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := server.Shutdown(ctx); err != nil {
+			_ = server.Close()
+		}
+	}()
 	if err = server.Serve(listener); err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
 	}
+	cancelShutdown()
+	<-shutdownDone
 }
 
 func publicOrigin(raw string) (string, error) {

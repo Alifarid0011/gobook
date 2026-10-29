@@ -10,9 +10,9 @@ name="gobook-${version}-linux-${arch}"
 stage="dist/$name"
 mkdir -p "$stage"
 CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -trimpath -o "$stage/gobook" .
-cp packaging/linux/gobook.sh "$stage/"
+cp packaging/linux/* "$stage/"
 cp docs/desktop.md "$stage/README.md"
 cp LICENSE "$stage/"
-chmod +x "$stage/gobook" "$stage/gobook.sh"
+chmod +x "$stage/gobook" "$stage/gobook.sh" "$stage/install.sh"
 tar -C dist -czf "dist/$name.tar.gz" "$name"
 (cd dist && sha256sum "$name.tar.gz" > "$name.tar.gz.sha256")

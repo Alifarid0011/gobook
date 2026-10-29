@@ -48,3 +48,7 @@ test('rejected command with one remote history entry never mixes remote and cach
  h.context.fetch=async()=>({ok:true,text:async()=>JSON.stringify({...snapshot([1,1]),error:'native session changed in another page',result:result(1)})});
  await h.check.run(1);assert.equal(h.check.foreign(),true);assert.equal(h.check.cache.size,0);assert.equal(h.renders.length,1);
 });
+
+test('stopped local app keeps debugger disabled without a capability',()=>{
+ const h=controller();h.context.token='';h.check.controls();assert.equal(h.$('debug-start').disabled,true);assert.equal(h.$('run').disabled,true);
+});

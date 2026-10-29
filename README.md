@@ -8,16 +8,28 @@ Built by [Ali Farid](https://github.com/Alifarid0011).
 
 ![GoBook workspace with a chart computed from Go cells](docs/workspace.jpg)
 
+## Local app
+
+Download a [release archive](https://github.com/Alifarid0011/gobook/releases/latest),
+then run `./install.sh` on Linux or `./Install-GoBook.ps1` in Windows PowerShell.
+Open **GoBook Local** from your application menu. It starts its local host, opens
+the authenticated workspace and reuses the live host on a second launch. No URL
+or token entry is required. Use **Quit GoBook** in the workspace to stop it.
+Go 1.25+ and a browser must be installed. [Installation and lifecycle](docs/desktop.md).
+
+The browser's **Install app** shortcut is a web shortcut and cannot start an
+absent host. Use the installed **GoBook Local** menu entry for automatic startup.
+
 ## Start
 
 Install Go 1.25 or newer:
 
 ```sh
-go install github.com/Alifarid0011/gobook@v0.5.1
+go install github.com/Alifarid0011/gobook@v0.6.0
 gobook
 ```
 
-If your Go binary directory is not on PATH, use `go run github.com/Alifarid0011/gobook@v0.5.1` instead.
+If your Go binary directory is not on PATH, use `go run github.com/Alifarid0011/gobook@v0.6.0` instead.
 
 Or run from a source checkout:
 

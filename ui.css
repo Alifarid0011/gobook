@@ -488,3 +488,5 @@ body[data-view="code"] .cell-output { display:none; }
 #memory-files { list-style:none; padding:0; }
 #memory-files li { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; padding:8px 0; border-bottom:1px solid var(--line); font:12px var(--mono); }
 #memory-files button { font:12px system-ui; }
+
+.local-app{display:flex;align-items:center;justify-content:space-between;gap:16px}.local-app div{display:flex;flex-wrap:wrap;gap:12px}.local-app[hidden]{display:none}body[data-local-app="true"] #connect,body[data-local-app="true"] #install{display:none}

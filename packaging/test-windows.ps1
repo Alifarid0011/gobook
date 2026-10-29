@@ -23,7 +23,20 @@ func main() { b, _ := json.Marshal(os.Args[1:]); if err := os.WriteFile(os.Geten
     $env:PATH = $temp
     $message = & $shell -NoProfile -ExecutionPolicy Bypass -File "$temp/gobook.ps1" 2>&1 | Out-String
     if ($LASTEXITCODE -eq 0 -or $message -notmatch 'Go compiler' -or $message -notmatch 'https://go\.dev/dl/') { throw "Missing Go compiler did not produce a useful failure (exit $LASTEXITCODE): $message" }
-    Write-Host 'Windows launcher checks passed'
+    $env:PATH = $oldPath
+    Copy-Item "$PSScriptRoot/windows/Install-GoBook.ps1", "$PSScriptRoot/windows/GoBook-Local.ps1" $temp
+    $app = Join-Path $temp 'installed app'
+    $shortcuts = Join-Path $temp 'start menu'
+    & "$temp/Install-GoBook.ps1" -InstallDir $app -ShortcutDir $shortcuts
+    & "$temp/Install-GoBook.ps1" -InstallDir $app -ShortcutDir $shortcuts
+    $link = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $shortcuts 'GoBook Local.lnk'))
+    if ($link.Arguments -notlike '*-WindowStyle Hidden*' -or $link.Arguments -notlike '*GoBook-Local.ps1*') { throw 'Installed shortcut does not launch local mode' }
+    & $shell -NoProfile -ExecutionPolicy Bypass -File "$app/GoBook-Local.ps1" -open=false
+    if ($LASTEXITCODE -ne 0) { throw 'Installed desktop launcher failed' }
+    $actual = Get-Content "$temp/args.json" -Raw | ConvertFrom-Json
+    $expected = @('-desktop', '-open=false')
+    if (($actual | ConvertTo-Json -Compress) -cne ($expected | ConvertTo-Json -Compress)) { throw 'Desktop launch arguments changed' }
+    Write-Host 'Windows launcher and installation checks passed'
 } finally {
     $env:PATH = $oldPath
     $env:GOBOOK_TEST_ARGS = $oldArgs

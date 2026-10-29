@@ -24,7 +24,7 @@
   document.querySelector('.intro-bottom > span').textContent=active?'● Native memory session · values retained':'◷ Fresh process on every run';
   document.querySelectorAll('.cell-foot').forEach(el=>el.textContent=active?'Shift Enter · native values stay in RAM; later cells are invalidated':'Shift Enter · Run to here repeats earlier cells in a fresh process');
   if(active) $('kernel-label').textContent=changed?'Memory kernel · restart required':'Native memory kernel';
-  $('debug-start').disabled=active||pending;
+  $('debug-start').disabled=active||pending||!token||busy||loadingExample;
  }
  function syncFiles(files,delta=[],cell=0) {
   const changed=new Set(delta.map(a=>a.name));

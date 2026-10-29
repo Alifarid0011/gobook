@@ -21,4 +21,13 @@ if PATH="$tmp/empty" /bin/bash "$tmp/package with spaces/gobook.sh" > "$tmp/miss
   exit 1
 fi
 grep -q 'Go compiler.*https://go.dev/dl/' "$tmp/missing"
-echo 'Linux launcher checks passed'
+cp "$root/packaging/linux/install.sh" "$root/packaging/linux/icon.svg" "$tmp/package with spaces/"
+XDG_DATA_HOME="$tmp/app data" bash "$tmp/package with spaces/install.sh"
+XDG_DATA_HOME="$tmp/app data" bash "$tmp/package with spaces/install.sh"
+GOBOOK_TEST_ARGS="$tmp/installed-args" "$tmp/app data/gobook/run-gobook" -open=false
+printf '%s\n' -desktop -open=false > "$tmp/expected-installed"
+cmp "$tmp/expected-installed" "$tmp/installed-args"
+grep -q '^Terminal=false$' "$tmp/app data/applications/io.github.Alifarid0011.GoBook.desktop"
+grep -q '^Name=GoBook Local$' "$tmp/app data/applications/io.github.Alifarid0011.GoBook.desktop"
+if command -v desktop-file-validate >/dev/null 2>&1; then desktop-file-validate "$tmp/app data/applications/io.github.Alifarid0011.GoBook.desktop"; fi
+echo 'Linux launcher and installation checks passed'
