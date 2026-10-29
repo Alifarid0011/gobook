@@ -1,0 +1,10 @@
+{
+ "version":1,
+ "title":"Monte Carlo: estimating π",
+ "note":"Deterministic seed, one million samples. The timer measures this Go loop, excluding compilation. Timings depend on the host and are not a comparison with another language.",
+ "imports":["fmt","math/rand/v2","time"],
+ "cells":[
+  {"code":"rng := rand.New(rand.NewPCG(42, 54))\nconst samples = 1_000_000\ninside := 0\nstart := time.Now()\nfor i := 0; i < samples; i++ {\n\tx, y := rng.Float64(), rng.Float64()\n\tif x*x+y*y <= 1 { inside++ }\n}\nelapsed := time.Since(start)"},
+  {"code":"fmt.Printf(\"π ≈ %.6f (%d samples)\\n\", 4*float64(inside)/float64(samples), samples)\nfmt.Printf(\"Loop duration: %s\\n\", elapsed)"}
+ ]
+}

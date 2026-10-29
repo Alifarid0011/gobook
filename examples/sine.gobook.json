@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "title": "Sampling a sine wave",
+  "note": "A native Go experiment: sample a function, then render an SVG with chartframe. Open this JSON from GoBook, inspect the code, and choose Run all.",
+  "imports": ["fmt", "math", "github.com/Alifarid0011/chartframe"],
+  "cells": [
+    {"code": "x, y := make([]float64, 101), make([]float64, 101)\nfor i := range x {\n\tx[i] = float64(i) * 2 * math.Pi / 100\n\ty[i] = math.Sin(x[i])\n}\nfmt.Printf(\"Sampled %d points\\n\", len(x))"},
+    {"code": "err := chartframe.New(\"Sine wave\").Labels(\"x (radians)\", \"sin(x)\").Line(\"sin\", x, y).Save(\"sine.svg\")\nif err != nil { panic(err) }\nfmt.Println(\"Created sine.svg\")"}
+  ]
+}
