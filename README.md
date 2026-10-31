@@ -4,6 +4,10 @@ A small computational notebook for Go. Write Go cells in your browser, edit and 
 
 Built by [Ali Farid](https://github.com/Alifarid0011).
 
+[Get started](https://alifarid0011.github.io/gobook/) ·
+[Download GoBook](https://github.com/Alifarid0011/gobook/releases/latest) ·
+[Try sheetframe in your browser](https://alifarid0011.github.io/sheetframe/)
+
 **Status: early release.** GoBook currently computes Go code. NotebookLM-style document sources, retrieval, and AI Q&A are future work and are not implemented.
 
 ![GoBook workspace with a chart computed from Go cells](docs/workspace.jpg)

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "title": "First steps: a small sales summary",
+  "note": "A synthetic three-value example using only fmt. Open this file with Open JSON, keep the default Interactive engine, and run the cells in order. Downloading or opening this file does not execute code. Change an amount in cell 1 and rerun cells 1 and 2 to update the summary.",
+  "imports": ["fmt"],
+  "cells": [
+    {"code": "amounts := []float64{10, 20, 30}\nfmt.Printf(\"Loaded %d amounts\\n\", len(amounts))"},
+    {"code": "total := 0.0\nfor _, amount := range amounts { total += amount }\nfmt.Printf(\"Total: %.0f\\nAverage: %.0f\\n\", total, total/float64(len(amounts)))"}
+  ]
+}
