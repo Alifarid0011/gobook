@@ -2,7 +2,7 @@ name: Public site
 on:
   push:
     branches: [main]
-    paths: ['site/**', 'docs/workspace.jpg', 'examples/penguins.gobook.json', 'scripts/build-site.sh', 'tests/site.test.cjs', '.github/workflows/pages.yml']
+    paths: ['site/**', 'docs/workspace.jpg', 'examples/penguins.gobook.json', 'scripts/build-site.sh', 'tests/site.test.cjs', 'public_site_test.go', '.github/workflows/pages.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -23,6 +23,7 @@ jobs:
         with:
           node-version: '22'
       - run: node --test tests/site.test.cjs
+      - run: go test -run TestPublicStarterNotebook .
       - run: bash scripts/build-site.sh
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
